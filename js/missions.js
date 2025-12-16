@@ -16,6 +16,99 @@ export function canLaunch(slot){
   return {ok:true, why:""};
 }
 
+/* =========================
+   REPORT / LORE HELPERS
+========================= */
+function pick(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+
+function outcomeLabel(outcome){
+  return outcome==="SUCCESS" ? "Misión completada con éxito."
+       : outcome==="PARTIAL" ? "Resultado parcial. Objetivo cumplido de forma limitada."
+       : outcome==="ABORT" ? "Misión abortada. Regreso anticipado (RTB)."
+       : "Misión fallida.";
+}
+
+function buildBriefing(m){
+  const zones = ["Dover", "Canterbury", "Thames Estuary", "Folkestone", "Maidstone", "Ashford", "Manston", "Ramsgate"];
+  const weather = ["bruma baja", "cielo roto", "nubes en capas", "buena visibilidad", "llovizna", "capa baja densa", "turbulencia moderada"];
+  const threats = ["Bf 109", "Bf 110", "Ju 88", "He 111", "formación numerosa", "contactos aislados", "incursión a baja cota"];
+
+  const zone = m.zone || pick(zones);
+  const meteo = m.weather || pick(weather);
+  const threat = m.threat || pick(threats);
+
+  const kind = m.typeKey || "PATROL";
+  const kindLine =
+    kind==="INTERCEPT" ? "Interceptación urgente." :
+    kind==="SCRAMBLE" ? "Scramble inmediato." :
+    kind==="ESCORT" ? "Escolta asignada." :
+    "Patrulla CAP.";
+
+  return [
+    `📍 Sector: ${zone}.`,
+    `🛰️ Orden: ${kindLine}`,
+    `☁️ Meteo: ${meteo}.`,
+    `⚠️ Amenaza estimada: ${threat}.`,
+  ].join("\n");
+}
+
+function buildDebrief(report){
+  const s = report.stats || {};
+  const lineKills = (s.kills ?? 0) > 0 ? `Derribos confirmados: ${s.kills}.` : "Sin derribos confirmados.";
+  const lineLosses = (s.losses ?? 0) > 0 ? `Pérdidas: ${s.losses} (${(s.lossCauses && s.lossCauses.length) ? s.lossCauses.join(", ") : "—"}).` : "Sin pérdidas.";
+  const lineDmg = (s.damageTotal ?? 0) > 0 ? `Daño total registrado: ${s.damageTotal}%.` : "Daños mínimos.";
+  const lineFuel = (s.fuelUsed == null) ? "" : `Fuel consumido: ${s.fuelUsed}%.`;
+  const lineAmmo = (s.ammoUsed == null) ? "" : `Munición consumida: ${s.ammoUsed}%.`;
+  const linePts  = (s.pointsDelta == null) ? "" : `Puntos obtenidos: +${s.pointsDelta}.`;
+
+  return [
+    outcomeLabel(report.outcome),
+    lineKills,
+    lineLosses,
+    lineDmg,
+    lineFuel,
+    lineAmmo,
+    linePts
+  ].filter(Boolean).join("\n");
+}
+
+function finalizeMissionReport(m, outcome, details){
+  game.missionHistory = game.missionHistory || [];
+
+  const createdAt = now();
+  const startedAt = m.startAt || m.createdAt || createdAt;
+
+  const report = {
+    id: `R${createdAt}_${m.id}`,
+    missionId: m.id,
+    title: m.name || "Misión",
+    squadId: m.assignedSquadronId ?? null,
+    outcome, // "SUCCESS" | "PARTIAL" | "FAIL" | "ABORT"
+    createdAt,
+    startedAt,
+    endedAt: createdAt,
+    briefing: m.briefing || buildBriefing(m),
+    events: details.events || [],
+    stats: {
+      kills: details.kills ?? 0,
+      losses: details.losses ?? 0,
+      lossCauses: details.lossCauses ?? [],
+      damageTotal: details.damageTotal ?? 0,
+      fuelUsed: details.fuelUsed ?? null,
+      ammoUsed: details.ammoUsed ?? null,
+      pointsDelta: details.pointsDelta ?? 0,
+    },
+  };
+
+  report.debrief = buildDebrief(report);
+
+  game.missionHistory.unshift(report);
+  game.missionHistory = game.missionHistory.slice(0, 50);
+}
+
+/* =========================
+   MISSION GENERATION
+========================= */
 export function generateMission(){
   const types = [
     {key:"PATROL",    name:"Patrulla costera", baseMin:2, baseMax:4, reward:[10,16], fatigue:[6,12]},
@@ -23,28 +116,38 @@ export function generateMission(){
     {key:"ESCORT",    name:"Escolta corta",    baseMin:3, baseMax:5, reward:[11,18], fatigue:[8,16]},
     {key:"SCRAMBLE",  name:"Alerta rápida",    baseMin:2, baseMax:4, reward:[11,19], fatigue:[10,18]},
   ];
-  const pick = types[Math.floor(Math.random()*types.length)];
-  const durMin = pick.baseMin + Math.floor(Math.random()*(pick.baseMax-pick.baseMin+1));
+  const pickType = types[Math.floor(Math.random()*types.length)];
+  const durMin = pickType.baseMin + Math.floor(Math.random()*(pickType.baseMax-pickType.baseMin+1));
   const durationMs = durMin * 60 * 1000;
   const requiredPlanes = [3,4,5][Math.floor(Math.random()*3)];
 
-  return {
+  const mission = {
     id: crypto.randomUUID?.() ?? (Math.random().toString(16).slice(2)),
-    typeKey: pick.key,
-    name: pick.name,
+    typeKey: pickType.key,
+    name: pickType.name,
     createdAt: now(),
     startAt: null,
     endAt: null,
     durationMs,
-    rewardMin: pick.reward[0],
-    rewardMax: pick.reward[1],
-    fatigueMin: pick.fatigue[0],
-    fatigueMax: pick.fatigue[1],
+    rewardMin: pickType.reward[0],
+    rewardMax: pickType.reward[1],
+    fatigueMin: pickType.fatigue[0],
+    fatigueMax: pickType.fatigue[1],
     requiredPlanes,
     assignedSquadronId: null,
     assignedSlotIds: [],
-    state: "PENDING"
+    state: "PENDING",
+
+    // report/lore fields (persisted in save)
+    zone: null,
+    weather: null,
+    threat: null,
+    briefing: null,
+    events: []
   };
+
+  mission.briefing = buildBriefing(mission);
+  return mission;
 }
 
 export function missionRisk(typeKey){
@@ -141,13 +244,21 @@ export function completeMission(m){
   let lostCount = 0;
   let damagedCount = 0;
 
+  const events = [];
+  const lossCauses = [];
+  let damageTotal = 0;
+
   const fuelSpent = fuelCostForMission(m.typeKey);
   const ammoSpent = ammoCostForMission(m.typeKey);
+
+  events.push(`Despegue completado. Escuadrón SQ ${m.assignedSquadronId}.`);
+  events.push(`Consumo estimado por aparato: Fuel -${fuelSpent}% • Ammo -${ammoSpent}%.`);
 
   for(const slotId of m.assignedSlotIds){
     const s = slotById(slotId);
     if(!s) continue;
     const p = pilotById(s.pilotId);
+    const pilotName = p ? p.name : "Piloto desconocido";
 
     s.fuel = clamp((s.fuel ?? 0) - fuelSpent, 0, 100);
     s.ammo = clamp((s.ammo ?? 0) - ammoSpent, 0, 100);
@@ -164,10 +275,15 @@ export function completeMission(m){
     if(p && p.alive && k > 0){
       p.kills = (p.kills ?? 0) + k;
       totalKills += k;
+      events.push(`Derribo confirmado: ${pilotName} (★).`);
     }
 
     const out = resolveSlotOutcome(s, p, m);
-    if(out.damage > 0) damagedCount++;
+    if(out.damage > 0){
+      damagedCount++;
+      damageTotal += out.damage;
+      events.push(`${s.callsign} vuelve con daños (${out.damage}%).`);
+    }
 
     if(out.lostPlane){
       lostCount++;
@@ -176,22 +292,26 @@ export function completeMission(m){
       s.service = null;
       s.pendingService = null;
 
-      const pilotName = p ? p.name : "Piloto desconocido";
       const why = (out.lossReason==="COMBAT") ? "eliminado en combate"
                 : (out.lossReason==="ACCIDENT") ? "accidente mecánico"
                 : (out.lossReason==="FUEL") ? "falta de combustible"
                 : "causa desconocida";
 
+      lossCauses.push(out.lossReason || "UNKNOWN");
+
       if(p){
         if(out.pilotDown){
           p.alive = false;
           pushLog(`✖️ ${s.callsign} no regresa: ${why}. ${pilotName} KIA/MIA.`);
+          events.push(`✖️ ${s.callsign} perdido (${why}). ${pilotName} KIA/MIA.`);
         } else {
           p.fatigue = clamp((p.fatigue ?? 0) + 20, 0, 100);
           pushLog(`⚠️ ${s.callsign} perdido: ${why}. ${pilotName} vuelve (rescate).`);
+          events.push(`⚠️ ${s.callsign} perdido (${why}). ${pilotName} rescatado.`);
         }
       } else {
         pushLog(`✖️ ${s.callsign} perdido: ${why}.`);
+        events.push(`✖️ ${s.callsign} perdido (${why}).`);
       }
       continue;
     }
@@ -202,6 +322,7 @@ export function completeMission(m){
 
   if(lostCount > 0){
     reward = Math.max(1, Math.floor(reward * (1 - 0.20*lostCount)));
+    events.push(`Penalización por pérdidas aplicada. Recompensa ajustada.`);
   }
 
   game.points += reward;
@@ -213,6 +334,19 @@ export function completeMission(m){
   if(lostCount>0) extra.push(`Pérdidas: ${lostCount}`);
 
   pushLog(`Misión completada: +${reward} pts. Fuel -${fuelSpent} • Ammo -${ammoSpent}.${extra.length ? " ("+extra.join(" • ")+")" : ""}`);
+
+  // guardar informe persistente
+  finalizeMissionReport(m, "SUCCESS", {
+    kills: totalKills,
+    losses: lostCount,
+    lossCauses,
+    damageTotal: clamp(Math.round(damageTotal), 0, 999),
+    fuelUsed: fuelSpent,
+    ammoUsed: ammoSpent,
+    pointsDelta: reward,
+    events
+  });
+
   saveGame();
 }
 
