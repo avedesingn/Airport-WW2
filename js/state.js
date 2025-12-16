@@ -37,7 +37,10 @@ export function defaultGame(){
     pilots,
     slots,
     missions: [],
+
+    // ✅ NUEVO: historial persistente de informes
     missionHistory: [],
+
     log: [{t: now(), msg:"Base RAF lista. v1.0: personal de tierra + colas + contratación (modular)."}]
   };
 }
@@ -54,9 +57,12 @@ export function load(){
 
     if(!g.crew) g.crew = { fuelers:1, mechanics:1, armorers:1 };
 
-    if(!Array.isArray(g.missions)) g.missions = [];
+    // ✅ NUEVO: asegurar array de informes
     if(!Array.isArray(g.missionHistory)) g.missionHistory = [];
-    if(!Array.isArray(g.log)) g.log = [];
+    // saneo mínimo de informes
+    g.missionHistory = g.missionHistory
+      .filter(r => r && typeof r === "object" && r.id && r.missionId)
+      .slice(0, 50);
 
     for(const p of (g.pilots ?? [])){
       if(typeof p.missions !== "number") p.missions = 0;
@@ -72,6 +78,10 @@ export function load(){
       if(!("service" in s)) s.service = null;
       if(!("pendingService" in s)) s.pendingService = null;
     }
+
+    // ✅ por si en saves antiguos no existe missions/log
+    if(!Array.isArray(g.missions)) g.missions = [];
+    if(!Array.isArray(g.log)) g.log = [];
 
     return g;
   }catch(e){
