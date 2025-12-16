@@ -415,8 +415,8 @@ function renderSlots(){
         <div>
           <div class="k">Fatiga piloto</div>
           <div class="v">
-            <b>${p ? Math.round(p.fatigue ?? 0) : "—"}</b>
-            ${p ? ` • <span class="state ${fat.cls}"><b>${fat.txt}</b></span>` : ``}
+            <b ${p ? `data-fatigue-val="${p.id}"` : ""} class="${p ? `state ${fat.cls}` : ""}">${p ? Math.round(p.fatigue ?? 0) : "—"}</b>
+            ${p ? ` • <span data-fatigue-txt="${p.id}" class="state ${fat.cls}"><b>${fat.txt}</b></span>` : ``}
             ${p && pilotResting(p) ? ` • <span class="pill tagRest">😴 descansando</span>` : ``}
           </div>
         </div>
@@ -584,7 +584,11 @@ function renderPilots(){
           ${deadTag}
           ${missionTag}
           ${restTag}
-          <div class="pill">Fatiga: <b class="state ${fat.cls}">${Math.round(p.fatigue ?? 0)}</b> <span class="state ${fat.cls}">${fat.txt}</span></div>
+          <div class="pill">
+            Fatiga:
+            <b class="state ${fat.cls}" data-fatigue-val="${p.id}">${Math.round(p.fatigue ?? 0)}</b>
+            <span class="state ${fat.cls}" data-fatigue-txt="${p.id}">${fat.txt}</span>
+          </div>
         </div>
       </div>
 
@@ -745,7 +749,7 @@ function renderMissions(){
       </div>
       <div class="muted" style="margin-top:10px;font-size:11px">
         ${eligible.length
-          ? `Escuadrones válidos: ${eligible.map(sqId => `<b>SQ ${sqId}</b>`).join(", ")}`
+          ? `Escuadrones válidos: ${eligible.map(sqId => `<b>SQ ${sqId}</b>`).join(", ")}` 
           : `No hay escuadrón válido (pilotos descansando, fatiga alta, fuel/ammo/condición insuficiente).`}
       </div>
     `;
@@ -833,6 +837,27 @@ function updateProgressUI(){
   }
 }
 
+/* Fatigue UI updates (sin re-render completo, para no cerrar <select>) */
+function updateFatigueUI(){
+  for(const p of game.pilots){
+    if(!p?.alive) continue;
+    const fat = fatigueState(p.fatigue ?? 0);
+
+    const vals = document.querySelectorAll(`[data-fatigue-val="${p.id}"]`);
+    const txts = document.querySelectorAll(`[data-fatigue-txt="${p.id}"]`);
+
+    vals.forEach(v=>{
+      v.textContent = Math.round(p.fatigue ?? 0);
+      v.className = `state ${fat.cls}`;
+    });
+
+    txts.forEach(t=>{
+      t.textContent = fat.txt;
+      t.className = `state ${fat.cls}`;
+    });
+  }
+}
+
 /* Public renderAll */
 export function renderAll(forcePanel=false){
   renderHeader();
@@ -853,6 +878,7 @@ export function renderAll(forcePanel=false){
   }
 
   updateProgressUI();
+  updateFatigueUI();
 }
 
 /* Wire UI once */
