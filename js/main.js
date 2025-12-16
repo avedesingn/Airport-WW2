@@ -9,10 +9,13 @@ function tick(){
   const dt = t - game.lastTick;
   game.lastTick = t;
 
+  let dirty = false;
+
   // servicios terminados
   for(const s of game.slots){
     if(s.state==="SERVICE" && s.service?.end && t >= s.service.end){
       finishService(s);
+      dirty = true;
     }
   }
 
@@ -20,13 +23,15 @@ function tick(){
   for(const p of game.pilots){
     if(p.rest?.active && p.rest.end && t >= p.rest.end){
       finishPilotRest(p);
+      dirty = true;
     }
   }
 
   // misiones terminadas
   for(const m of game.missions.filter(x=>x.state==="ACTIVE")){
-    if(t >= m.endAt){
-      completeMission(m);
+    if(m.endAt && t >= m.endAt){
+      completeMission(m); // ya guarda dentro
+      dirty = true;
     }
   }
 
@@ -41,8 +46,8 @@ function tick(){
   // render
   renderAll(false);
 
-  // autosave cada 10s aprox
-  if(Math.floor(t/10000) !== Math.floor((t-dt)/10000)){
+  // autosave cada 10s aprox (si no se guardó ya por algo “gordo”)
+  if(!dirty && Math.floor(t/10000) !== Math.floor((t-dt)/10000)){
     saveGame();
   }
 }
