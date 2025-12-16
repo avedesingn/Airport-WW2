@@ -37,6 +37,7 @@ export function defaultGame(){
     pilots,
     slots,
     missions: [],
+    missionHistory: [],
     log: [{t: now(), msg:"Base RAF lista. v1.0: personal de tierra + colas + contratación (modular)."}]
   };
 }
@@ -52,6 +53,10 @@ export function load(){
     if(!g.ui.tab) g.ui.tab = "PLANES";
 
     if(!g.crew) g.crew = { fuelers:1, mechanics:1, armorers:1 };
+
+    if(!Array.isArray(g.missions)) g.missions = [];
+    if(!Array.isArray(g.missionHistory)) g.missionHistory = [];
+    if(!Array.isArray(g.log)) g.log = [];
 
     for(const p of (g.pilots ?? [])){
       if(typeof p.missions !== "number") p.missions = 0;
