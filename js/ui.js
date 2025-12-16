@@ -36,7 +36,7 @@ function starString(kills){
   return n ? "★".repeat(n) : "";
 }
 
-/* Modal (asignar escuadrón) */
+/* Modal (general) */
 const modalMask = ()=>document.getElementById("modalMask");
 const modalClose = ()=>document.getElementById("modalClose");
 const modalTitle = ()=>document.getElementById("modalTitle");
@@ -48,6 +48,63 @@ let pendingAssignMissionId = null;
 function openModal(){ modalMask().style.display="flex"; modalMask().setAttribute("aria-hidden","false"); }
 function closeModal(){ pendingAssignMissionId=null; modalMask().style.display="none"; modalMask().setAttribute("aria-hidden","true"); }
 
+/* ✅ Report modal */
+const reportMask = ()=>document.getElementById("reportModal");
+const reportClose = ()=>document.getElementById("reportClose");
+const reportTitle = ()=>document.getElementById("reportTitle");
+const reportMeta  = ()=>document.getElementById("reportMeta");
+const reportBrief = ()=>document.getElementById("reportBriefing");
+const reportEvents= ()=>document.getElementById("reportEvents");
+const reportStats = ()=>document.getElementById("reportStats");
+const reportDebr  = ()=>document.getElementById("reportDebrief");
+
+function openReportModal(report){
+  if(!reportMask()) return;
+
+  const dStart = new Date(report.startedAt ?? report.createdAt ?? Date.now());
+  const dEnd   = new Date(report.endedAt ?? report.createdAt ?? Date.now());
+  const hh1 = String(dStart.getHours()).padStart(2,"0");
+  const mm1 = String(dStart.getMinutes()).padStart(2,"0");
+  const hh2 = String(dEnd.getHours()).padStart(2,"0");
+  const mm2 = String(dEnd.getMinutes()).padStart(2,"0");
+
+  reportTitle().textContent = report.title || "Informe de misión";
+  reportMeta().textContent = `SQ ${report.squadId ?? "—"} • ${hh1}:${mm1} → ${hh2}:${mm2} • Resultado: ${report.outcome ?? "—"}`;
+
+  reportBrief().textContent  = report.briefing ?? "—";
+  reportDebr().textContent   = report.debrief ?? "—";
+
+  const ev = Array.isArray(report.events) ? report.events : [];
+  reportEvents().textContent = ev.length ? ev.map(e=>`• ${e}`).join("\n") : "—";
+
+  const s = report.stats || {};
+  const lines = [
+    `Derribos: ${s.kills ?? 0}`,
+    `Pérdidas: ${s.losses ?? 0}`,
+    `Causas: ${(Array.isArray(s.lossCauses) && s.lossCauses.length) ? s.lossCauses.join(", ") : "—"}`,
+    `Daño total: ${s.damageTotal ?? 0}%`,
+    `Fuel usado: ${(s.fuelUsed==null) ? "—" : `${s.fuelUsed}%`}`,
+    `Munición usada: ${(s.ammoUsed==null) ? "—" : `${s.ammoUsed}%`}`,
+    `Puntos: ${(s.pointsDelta==null) ? "—" : `+${s.pointsDelta}`}`,
+  ];
+  reportStats().textContent = lines.join("\n");
+
+  reportMask().style.display="flex";
+  reportMask().setAttribute("aria-hidden","false");
+}
+function closeReportModal(){
+  if(!reportMask()) return;
+  reportMask().style.display="none";
+  reportMask().setAttribute("aria-hidden","true");
+}
+
+function reportForMissionId(missionId){
+  const list = game.missionHistory || [];
+  // el primero suele ser el más reciente (unshift)
+  return list.find(r => r && r.missionId === missionId) || null;
+}
+
+/* Squad modal */
 function openSquadModal(mission){
   pendingAssignMissionId = mission.id;
   modalTitle().textContent = "Asignar escuadrón";
@@ -88,73 +145,6 @@ function openSquadModal(mission){
     }
   }
   openModal();
-}
-
-/* =========================
-   REPORT MODAL (historial)
-========================= */
-function reportModal(){ return document.getElementById("reportModal"); }
-function reportCloseBtn(){ return document.getElementById("reportClose"); }
-function reportTitleEl(){ return document.getElementById("reportTitle"); }
-function reportMetaEl(){ return document.getElementById("reportMeta"); }
-function reportBriefingEl(){ return document.getElementById("reportBriefing"); }
-function reportEventsEl(){ return document.getElementById("reportEvents"); }
-function reportStatsEl(){ return document.getElementById("reportStats"); }
-function reportDebriefEl(){ return document.getElementById("reportDebrief"); }
-
-function outcomeLabel(o){
-  if(o==="SUCCESS") return "Éxito";
-  if(o==="PARTIAL") return "Parcial";
-  if(o==="ABORT") return "Abortada";
-  return "Fallida";
-}
-
-function openReport(r){
-  const m = reportModal();
-  if(!m) return;
-
-  reportTitleEl().textContent = r.title || "Informe de misión";
-
-  const when = new Date(r.createdAt || Date.now()).toLocaleString();
-  const sq = (r.squadId ?? null) != null ? `SQ ${r.squadId}` : "Sin SQ";
-  reportMetaEl().textContent = `${when} · ${sq} · ${outcomeLabel(r.outcome)}`;
-
-  reportBriefingEl().textContent = r.briefing || "";
-
-  // events
-  const events = r.events || [];
-  reportEventsEl().innerHTML = events.length
-    ? `<ul style="margin:0;padding-left:18px">${events.map(e=>`<li>${e}</li>`).join("")}</ul>`
-    : `<div class="muted" style="font-size:12px">Sin eventos registrados.</div>`;
-
-  // stats
-  const s = r.stats || {};
-  const pairs = [
-    ["Derribos", s.kills ?? 0],
-    ["Pérdidas", s.losses ?? 0],
-    ["Causas", (s.lossCauses && s.lossCauses.length) ? s.lossCauses.join(", ") : "—"],
-    ["Daño total", (s.damageTotal ?? 0) + "%"],
-    ["Fuel usado", s.fuelUsed == null ? "—" : (s.fuelUsed + "%")],
-    ["Ammo usada", s.ammoUsed == null ? "—" : (s.ammoUsed + "%")],
-    ["Puntos", s.pointsDelta ?? 0],
-  ];
-  reportStatsEl().innerHTML = `
-    <div style="display:grid;grid-template-columns:140px 1fr;gap:6px 10px">
-      ${pairs.map(([k,v])=>`<div class="muted" style="font-size:12px">${k}</div><div style="font-size:12px"><b>${v}</b></div>`).join("")}
-    </div>
-  `;
-
-  reportDebriefEl().textContent = r.debrief || "";
-
-  m.style.display = "flex";
-  m.setAttribute("aria-hidden","false");
-}
-
-function closeReport(){
-  const m = reportModal();
-  if(!m) return;
-  m.style.display = "none";
-  m.setAttribute("aria-hidden","true");
 }
 
 /* Shop */
@@ -816,19 +806,20 @@ function renderMissions(){
       </div>
       <div class="muted" style="margin-top:10px;font-size:11px">
         ${eligible.length
-          ? `Escuadrones válidos: ${eligible.map(sqId => `<b>SQ ${sqId}</b>`).join(", ")}` 
+          ? `Escuadrones válidos: ${eligible.map(sqId => `<b>SQ ${sqId}</b>`).join(", ")}`
           : `No hay escuadrón válido (pilotos descansando, fatiga alta, fuel/ammo/condición insuficiente).`}
       </div>
     `;
     elPending.appendChild(div);
   }
 
-  // OLD "done missions" list (simple). Keep as-is.
   for(const m of done.sort((a,b)=>b.endAt-a.endAt).slice(0,10)){
     const div = document.createElement("div");
     div.className = "mission";
     const sqMeta = SQUAD_COLORS[m.assignedSquadronId ?? 0] ?? SQUAD_COLORS[0];
     div.style.borderColor = sqMeta.color;
+
+    const rep = reportForMissionId(m.id);
 
     div.innerHTML = `
       <div class="missionHead">
@@ -836,56 +827,12 @@ function renderMissions(){
           <div class="mName">${m.name}</div>
           <div class="mSmall">Hecha • SQ <b>${m.assignedSquadronId}</b> • Aviones: <b>${m.assignedSlotIds.length}</b></div>
         </div>
-        <span class="pill">✅</span>
+        <div class="btns">
+          ${rep ? `<button class="primary" data-act="viewReport" data-mid="${m.id}">Ver informe</button>` : `<span class="pill">✅</span>`}
+        </div>
       </div>
     `;
     elHistory.appendChild(div);
-  }
-
-  // NEW: persistent mission reports (history) - appended below
-  const reports = (game.missionHistory || []).slice(0, 20);
-  if(reports.length){
-    const sep = document.createElement("div");
-    sep.className = "hr";
-    elHistory.appendChild(sep);
-
-    const title = document.createElement("div");
-    title.className = "muted";
-    title.style.fontSize = "12px";
-    title.style.margin = "10px 0 6px";
-    title.innerHTML = `<b>Informes (persistente)</b> · ${reports.length} mostrados`;
-    elHistory.appendChild(title);
-
-    for(const r of reports){
-      const div = document.createElement("div");
-      div.className = "mission";
-
-      const sqMeta = SQUAD_COLORS[r.squadId ?? 0] ?? SQUAD_COLORS[0];
-      div.style.borderColor = sqMeta.color;
-
-      const when = new Date(r.createdAt || Date.now()).toLocaleString();
-      const sq = (r.squadId ?? null) != null ? `SQ ${r.squadId}` : "Sin SQ";
-
-      div.innerHTML = `
-        <div class="missionHead">
-          <div>
-            <div class="mName">${r.title || "Informe"}</div>
-            <div class="mSmall">${when} • ${sq} • Resultado: <b>${outcomeLabel(r.outcome)}</b></div>
-          </div>
-          <div class="btns">
-            <button class="primary" data-act="openReport" data-rid="${r.id}">Ver informe</button>
-          </div>
-        </div>
-      `;
-      elHistory.appendChild(div);
-    }
-  } else {
-    const msg = document.createElement("div");
-    msg.className = "muted";
-    msg.style.fontSize = "12px";
-    msg.style.marginTop = "10px";
-    msg.textContent = "Informes: aún no hay informes persistentes. Completa una misión para generar el primero.";
-    elHistory.appendChild(msg);
   }
 
   document.querySelectorAll("button[data-act='assignSquad']").forEach(btn=>{
@@ -909,12 +856,13 @@ function renderMissions(){
     });
   });
 
-  document.querySelectorAll("button[data-act='openReport']").forEach(btn=>{
+  // ✅ abrir informe
+  document.querySelectorAll("button[data-act='viewReport']").forEach(btn=>{
     btn.addEventListener("click", ()=>{
-      const rid = btn.dataset.rid;
-      const r = (game.missionHistory || []).find(x=>x.id===rid);
-      if(!r) return;
-      openReport(r);
+      const mid = btn.dataset.mid;
+      const rep = reportForMissionId(mid);
+      if(!rep){ pushLog("No se encontró el informe de esa misión."); return; }
+      openReportModal(rep);
     });
   });
 }
@@ -1006,14 +954,13 @@ export function renderAll(forcePanel=false){
 
 /* Wire UI once */
 export function wireUI(){
-  // modal close (asignar escuadrón)
+  // modal close
   document.getElementById("modalClose").addEventListener("click", closeModal);
   document.getElementById("modalMask").addEventListener("click", (e)=>{ if(e.target===document.getElementById("modalMask")) closeModal(); });
 
-  // report modal close (informe)
-  reportCloseBtn()?.addEventListener("click", closeReport);
-  reportModal()?.addEventListener("click", (e)=>{ if(e.target===reportModal()) closeReport(); });
-  document.addEventListener("keydown", (e)=>{ if(e.key==="Escape") closeReport(); });
+  // ✅ report modal close
+  if(reportClose()) reportClose().addEventListener("click", closeReportModal);
+  if(reportMask()) reportMask().addEventListener("click", (e)=>{ if(e.target===reportMask()) closeReportModal(); });
 
   document.getElementById("btnShop").addEventListener("click", openShopModal);
 
