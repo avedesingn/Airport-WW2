@@ -295,8 +295,6 @@ function renderHeader(){
   document.getElementById("mechanicsLabel").textContent = `${busyCount("MAINT")}/${game.crew.mechanics}`;
   document.getElementById("armorersLabel").textContent = `${busyCount("AMMO")}/${game.crew.armorers}`;
 
-  document.getElementById("armorersLabel").textContent = `${busyCount("AMMO")}/${game.crew.armorers}`;
-
   document.getElementById("qFuel").textContent = queueCount("FUEL");
   document.getElementById("qMaint").textContent = queueCount("MAINT");
   document.getElementById("qAmmo").textContent = queueCount("AMMO");
@@ -344,16 +342,15 @@ function squadSummary(slotsInSquad){
   const servicing = slotsInSquad.filter(s=>s.state==="SERVICE").length;
   const queued = slotsInSquad.filter(s=>!!s.pendingService && s.state==="READY").length;
   const lost = slotsInSquad.filter(s=>s.state==="LOST").length;
-
   return { total, ready, activeMission, servicing, queued, lost };
 }
 
-/* Render Slots (agrupado por escuadrón) */
+/* Render Slots (agrupado por escuadrón, EN FILAS) */
 function renderSlots(){
   const root = document.getElementById("slots");
   root.innerHTML = "";
 
-  // El contenedor pasa a ser una columna de “secciones de escuadrón”
+  // El contenedor principal: secciones una debajo de otra
   root.style.display = "grid";
   root.style.gridTemplateColumns = "1fr";
   root.style.gap = "12px";
@@ -365,7 +362,6 @@ function renderSlots(){
     return String(a.callsign).localeCompare(String(b.callsign), "es");
   });
 
-  // Render por escuadrón en orden fijo (SQUAD_IDS)
   for(const sqId of SQUAD_IDS){
     const group = sorted.filter(s => (s.squadronId ?? 0) === sqId);
     if(group.length === 0) continue;
@@ -397,12 +393,17 @@ function renderSlots(){
         </div>
         <span class="sqBadge" style="border-color:${meta.color}; background:${meta.badge}; color:#eaf2ff;">SQ ${sqId}</span>
       </div>
-      <div class="slots" data-sq-grid="${sqId}" style="padding:12px"></div>
+      <div data-sq-list="${sqId}" style="padding:12px"></div>
     `;
 
     root.appendChild(section);
 
-    const gridEl = section.querySelector(`[data-sq-grid="${sqId}"]`);
+    const listEl = section.querySelector(`[data-sq-list="${sqId}"]`);
+
+    // FORZAMOS LISTA VERTICAL (FILAS)
+    listEl.style.display = "flex";
+    listEl.style.flexDirection = "column";
+    listEl.style.gap = "12px";
 
     for(const s of group){
       const p = pilotById(s.pilotId);
@@ -477,6 +478,10 @@ function renderSlots(){
       const div = document.createElement("div");
       div.className = "slot";
       div.style.setProperty("--sq-color", meta.color);
+
+      // CLAVE: que cada tarjeta ocupe TODO el ancho y no “encolumne”
+      div.style.width = "100%";
+      div.style.maxWidth = "100%";
 
       const pilotText = p ? `${p.name} (Skill ${p.skill})` : "—";
       const imgSrc = planeImgForModel(s.model);
@@ -576,11 +581,11 @@ function renderSlots(){
         </div>
       `;
 
-      gridEl.appendChild(div);
+      listEl.appendChild(div);
     }
   }
 
-  // Delegación de eventos dentro del root
+  // Eventos dentro del root
   root.querySelectorAll("button[data-act]").forEach(btn=>{
     btn.addEventListener("click", ()=>{
       const act = btn.dataset.act;
@@ -993,7 +998,6 @@ export function renderAll(forcePanel=false){
 
 /* Wire UI once */
 export function wireUI(){
-  // modal close
   document.getElementById("modalClose").addEventListener("click", closeModal);
   document.getElementById("modalMask").addEventListener("click", (e)=>{ if(e.target===document.getElementById("modalMask")) closeModal(); });
 
