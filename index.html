@@ -57,10 +57,9 @@
     }
 
     /* =========================
-       NUEVO LAYOUT: SQUADS + ROWS
+       LAYOUT: SQUADS + ROWS (PRO)
     ========================= */
 
-    /* contenedor general de slots: ahora es una lista vertical */
     .slots{display:grid;grid-template-columns:1fr;gap:12px}
 
     .squadBlock{
@@ -108,16 +107,15 @@
       background: var(--sq-color, #2a3c55);
     }
 
-    /* fila compacta: imagen izquierda, info centro, botones derecha */
+    /* ✅ 2 columnas: miniatura + contenido (acciones van dentro del contenido) */
     .slotRow{
       display:grid;
-      grid-template-columns: 96px 1fr auto;
+      grid-template-columns: 96px 1fr;
       gap:12px;
       align-items:start;
     }
-    @media (max-width: 780px){
+    @media (max-width: 560px){
       .slotRow{ grid-template-columns: 88px 1fr; }
-      .slotActions{ grid-column: 1 / -1; justify-content:flex-start; }
     }
 
     .planeThumb{
@@ -135,12 +133,14 @@
     }
 
     .slotMain{min-width:0}
-    .slotHeadLine{
+
+    .slotTopLine{
       display:flex;
       align-items:flex-start;
       justify-content:space-between;
       gap:10px;
     }
+
     .slotName{font-weight:900;font-size:14px}
     .slotMeta{
       color:var(--muted);
@@ -148,40 +148,44 @@
       margin-top:3px;
       line-height:1.35;
     }
+
     .status{font-size:11px}
     .status.good{color:var(--good)} .status.warn{color:var(--warn)} .status.bad{color:var(--bad)} .status.warn2{color:var(--warn2)}
 
-    .needsLine{margin-top:8px;color:#cfe2ff;font-size:11px;display:flex;gap:6px;flex-wrap:wrap}
+    .needsLine{
+      margin-top:8px;
+      color:#cfe2ff;
+      font-size:11px;
+      display:flex;
+      gap:6px;
+      flex-wrap:wrap
+    }
     .needTag{
       display:inline-flex;align-items:center;gap:6px;
       padding:3px 7px;border-radius:999px;border:1px solid #26364c;background:#0c131d;
     }
 
+    /* ✅ Acciones compactas, dentro del contenido (sin “columna rara”) */
     .slotActions{
+      margin-top:10px;
       display:flex;
       gap:8px;
       align-items:center;
-      justify-content:flex-end;
+      justify-content:flex-start;
       flex-wrap:wrap;
-      padding-top:2px;
     }
     .slotActions button{
-      padding:8px 10px;
+      padding:7px 10px;
       border-radius:12px;
       font-weight:800;
       white-space:nowrap;
     }
-
-    .slotFoot{
-      margin-top:10px;
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:10px;
-      flex-wrap:wrap;
+    .slotActions button:not(.primary):not(.danger){
+      background:#0c131d;
+      border-color:#26364c;
     }
 
-    /* detalles plegables (stats + select squad + “listo para misión”) */
+    /* detalles plegables */
     details.slotDetails{
       margin-top:10px;
       border:1px solid var(--line);
