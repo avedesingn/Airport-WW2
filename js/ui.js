@@ -1,8 +1,29 @@
 import { game, saveGame, hardReset, pilotById, slotById } from "./state.js";
-import { MISSION_GEN_COST, BUY_PILOT_COST, BUY_PLANE_COST, HIRE_ARMORER_COST, HIRE_FUELER_COST, HIRE_MECHANIC_COST, SQUAD_COLORS, SQUAD_IDS } from "./constants.js";
+import {
+  MISSION_GEN_COST,
+  BUY_PILOT_COST,
+  BUY_PLANE_COST,
+  HIRE_ARMORER_COST,
+  HIRE_FUELER_COST,
+  HIRE_MECHANIC_COST,
+  SQUAD_COLORS,
+  SQUAD_IDS
+} from "./constants.js";
 import { fmtClock, fmtTime, clamp } from "./utils.js";
 import { fatigueState, pilotPlane, pilotResting, pilotInMission, startPilotRest } from "./pilots.js";
-import { busyCount, freeCrew, queueCount, startOrQueueService, cancelPending, serviceFuelMins, serviceFuelCost, serviceAmmoMins, serviceAmmoCost, serviceMaintMins, serviceMaintCost } from "./services.js";
+import {
+  busyCount,
+  freeCrew,
+  queueCount,
+  startOrQueueService,
+  cancelPending,
+  serviceFuelMins,
+  serviceFuelCost,
+  serviceAmmoMins,
+  serviceAmmoCost,
+  serviceMaintMins,
+  serviceMaintCost
+} from "./services.js";
 import { generateMission, findEligibleSquads, assignMissionToSquad, canLaunch, missionRisk, spendForNewMission } from "./missions.js";
 
 /* =========================
@@ -115,7 +136,17 @@ function buyPilot(){
   if(game.points < BUY_PILOT_COST) return false;
   game.points -= BUY_PILOT_COST;
   const skill = [1,1,2,2,3][Math.floor(Math.random()*5)];
-  const p = {id: crypto.randomUUID?.() ?? (Math.random().toString(16).slice(2)), name:randomPilotName(), role:"Fighter", skill, fatigue:Math.floor(Math.random()*16), alive:true, missions:0, kills:0, rest:{active:false}};
+  const p = {
+    id: crypto.randomUUID?.() ?? (Math.random().toString(16).slice(2)),
+    name:randomPilotName(),
+    role:"Fighter",
+    skill,
+    fatigue:Math.floor(Math.random()*16),
+    alive:true,
+    missions:0,
+    kills:0,
+    rest:{active:false}
+  };
   game.pilots.push(p);
   pushLog(`✅ Reclutado: ${p.name} (Skill ${p.skill}). -${BUY_PILOT_COST} pts.`);
   needsPilotsRender = true;
@@ -264,6 +295,8 @@ function renderHeader(){
   document.getElementById("mechanicsLabel").textContent = `${busyCount("MAINT")}/${game.crew.mechanics}`;
   document.getElementById("armorersLabel").textContent = `${busyCount("AMMO")}/${game.crew.armorers}`;
 
+  document.getElementById("armorersLabel").textContent = `${busyCount("AMMO")}/${game.crew.armorers}`;
+
   document.getElementById("qFuel").textContent = queueCount("FUEL");
   document.getElementById("qMaint").textContent = queueCount("MAINT");
   document.getElementById("qAmmo").textContent = queueCount("AMMO");
@@ -304,10 +337,26 @@ function slotNeeds(slot){
   };
 }
 
-/* Render Slots */
+function squadSummary(slotsInSquad){
+  const total = slotsInSquad.length;
+  const ready = slotsInSquad.filter(s=>s.state==="READY" && canLaunch(s).ok).length;
+  const activeMission = slotsInSquad.filter(s=>s.state==="MISSION").length;
+  const servicing = slotsInSquad.filter(s=>s.state==="SERVICE").length;
+  const queued = slotsInSquad.filter(s=>!!s.pendingService && s.state==="READY").length;
+  const lost = slotsInSquad.filter(s=>s.state==="LOST").length;
+
+  return { total, ready, activeMission, servicing, queued, lost };
+}
+
+/* Render Slots (agrupado por escuadrón) */
 function renderSlots(){
-  const el = document.getElementById("slots");
-  el.innerHTML = "";
+  const root = document.getElementById("slots");
+  root.innerHTML = "";
+
+  // El contenedor pasa a ser una columna de “secciones de escuadrón”
+  root.style.display = "grid";
+  root.style.gridTemplateColumns = "1fr";
+  root.style.gap = "12px";
 
   const sorted = [...game.slots].sort((a,b)=>{
     const sa = a.squadronId ?? 0;
@@ -316,182 +365,223 @@ function renderSlots(){
     return String(a.callsign).localeCompare(String(b.callsign), "es");
   });
 
-  for(const s of sorted){
-    const p = pilotById(s.pilotId);
-    const st = slotStatus(s);
-    const meta = SQUAD_COLORS[s.squadronId ?? 0] ?? SQUAD_COLORS[0];
+  // Render por escuadrón en orden fijo (SQUAD_IDS)
+  for(const sqId of SQUAD_IDS){
+    const group = sorted.filter(s => (s.squadronId ?? 0) === sqId);
+    if(group.length === 0) continue;
 
-    const fat = p ? fatigueState(p.fatigue ?? 0) : {txt:"—", cls:"bad"};
-    const fuelState = stateByValue(s.fuel ?? 0);
-    const condState = stateByValue(s.condition ?? 0);
-    const ammoState = stateByValue(s.ammo ?? 0);
+    const meta = SQUAD_COLORS[sqId] ?? SQUAD_COLORS[0];
+    const sum = squadSummary(group);
 
-    const kills = p ? (p.kills ?? 0) : 0;
-    const stars = p ? starString(kills) : "";
+    const section = document.createElement("div");
+    section.style.border = "1px solid var(--line)";
+    section.style.borderRadius = "14px";
+    section.style.background = "rgba(255,255,255,.02)";
+    section.style.overflow = "hidden";
 
-    const needs = slotNeeds(s);
-    const needTags = [];
-    if(s.state!=="LOST"){
-      if(needs.fuel) needTags.push(`<span class="needTag">⛽ Necesita fuel</span>`);
-      if(needs.ammo) needTags.push(`<span class="needTag">🔫 Necesita munición</span>`);
-      if(needs.maint)needTags.push(`<span class="needTag">🛠️ Necesita reparación</span>`);
-    }
-
-    let svcBlock = "";
-    if(s.state === "SERVICE" && s.service?.start && s.service?.end){
-      const total = s.service.end - s.service.start;
-      const left = s.service.end - Date.now();
-      const done = clamp(1 - (left/total), 0, 1);
-      const k = s.service.kind;
-      const label = (k==="FUEL") ? "Repostaje" : (k==="AMMO") ? "Munición" : "Mantenimiento";
-      svcBlock = `
-        <div class="miniBarWrap">
-          <div class="miniBarRow">
-            <div class="muted">${label}</div>
-            <div class="pill">⏱️ <span data-svc-time="${s.id}">${fmtTime(left)}</span></div>
-          </div>
-          <div class="bar"><i data-svc-bar="${s.id}" style="width:${Math.round(done*100)}%"></i></div>
-          <div class="muted" style="font-size:11px;margin-top:6px">Coste: <b>${s.service.cost}</b> pts</div>
-        </div>
-      `;
-    }
-
-    let pendingBlock = "";
-    if(s.pendingService){
-      const ps = s.pendingService;
-      const label = (ps.kind==="FUEL") ? "Repostaje" : (ps.kind==="AMMO") ? "Munición" : "Mantenimiento";
-      pendingBlock = `
-        <div class="miniBarWrap">
-          <div class="miniBarRow">
-            <div class="muted">${label} (cola)</div>
-            <div class="pill">Reserva: <b>${ps.cost}</b> pts</div>
-          </div>
-          <div class="muted" style="font-size:11px">
-            En cola • Tiempo estimado: ${ps.mins} min • Cola actual: <b>${queueCount(ps.kind)}</b>
-          </div>
-          <div style="margin-top:8px">
-            <button class="danger" data-act="cancelQueue" data-id="${s.id}">Cancelar cola</button>
-          </div>
-        </div>
-      `;
-    }
-
-    const serviceBlocked = (s.state==="MISSION" || s.state==="LOST" || s.state==="SERVICE");
-
-    const removeAllowed = (s.state === "LOST") && (!p || !p.alive);
-    const removeBtn = removeAllowed
-      ? `<button class="danger" data-act="removeLost" data-id="${s.id}">Eliminar ficha</button>`
-      : "";
-
-    const fuelM = serviceFuelMins(s.fuel), fuelC = serviceFuelCost(s.fuel);
-    const ammoM = serviceAmmoMins(s.ammo), ammoC = serviceAmmoCost(s.ammo);
-    const mainM = serviceMaintMins(s.condition), mainC = serviceMaintCost(s.condition);
-
-    const div = document.createElement("div");
-    div.className = "slot";
-    div.style.setProperty("--sq-color", meta.color);
-
-    const pilotText = p ? `${p.name} (Skill ${p.skill})` : "—";
-    const imgSrc = planeImgForModel(s.model);
-
-    div.innerHTML = `
-      <div class="slotTop">
-        <div class="slotLeft">
-          <img class="planeThumb" src="${imgSrc}" alt="${s.model}" loading="lazy"
-            onerror="this.onerror=null;this.src='${PLANE_IMG_FALLBACK}'">
+    section.innerHTML = `
+      <div style="
+        display:flex;align-items:center;justify-content:space-between;gap:10px;
+        padding:12px 12px 10px 12px;
+        border-bottom:1px solid var(--line);
+        background: linear-gradient(90deg, ${meta.badge || "rgba(255,255,255,.03)"}, rgba(0,0,0,0));
+      ">
+        <div style="display:flex;align-items:center;gap:10px">
+          <span class="sqDot" style="background:${meta.color}"></span>
           <div>
-            <div class="slotName">${s.callsign}</div>
-            <div class="slotMeta">
-              ${s.model}<br>
-              Piloto: <b>${pilotText}</b> •
-              Misiones: <b>${p ? (p.missions ?? 0) : "—"}</b> •
-              Derribos: <b>${p ? kills : "—"}</b>
-              ${stars ? `<span class="stars"> ${stars}</span>` : ``}
+            <div style="font-weight:900;font-size:13px;color:#d7e6ff">${meta.name} — SQ ${sqId}</div>
+            <div class="muted" style="font-size:11px;margin-top:2px">
+              Aviones: <b>${sum.total}</b> • Listos: <b>${sum.ready}</b> • En misión: <b>${sum.activeMission}</b> • Servicio: <b>${sum.servicing}</b> • Cola: <b>${sum.queued}</b> • Perdidos: <b>${sum.lost}</b>
             </div>
-            ${needTags.length ? `<div class="needsLine">${needTags.join("")}</div>` : ``}
           </div>
         </div>
-
-        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
-          <span class="sqBadge" style="border-color:${meta.color}; background:${meta.badge}; color:#eaf2ff;">SQ ${s.squadronId ?? 0}</span>
-          <div class="status ${st.cls}">${st.txt}</div>
-        </div>
+        <span class="sqBadge" style="border-color:${meta.color}; background:${meta.badge}; color:#eaf2ff;">SQ ${sqId}</span>
       </div>
-
-      ${(svcBlock || pendingBlock) ? `<div class="hr"></div>${svcBlock}${pendingBlock ? `<div class="hr"></div>${pendingBlock}` : ""}` : ""}
-
-      <div class="hr"></div>
-
-      <div class="kv">
-        <div>
-          <div class="k">Escuadrón</div>
-          <div class="v">
-            <select data-act="setSquad" data-id="${s.id}" ${serviceBlocked ? "disabled" : ""}>
-              ${SQUAD_IDS.map(n => `<option value="${n}" ${n===(s.squadronId??0)?"selected":""}>SQ ${n}</option>`).join("")}
-            </select>
-          </div>
-        </div>
-
-        <div>
-          <div class="k">Fatiga piloto</div>
-          <div class="v">
-            <b ${p ? `data-fatigue-val="${p.id}"` : ""} class="${p ? `state ${fat.cls}` : ""}">${p ? Math.round(p.fatigue ?? 0) : "—"}</b>
-            ${p ? ` • <span data-fatigue-txt="${p.id}" class="state ${fat.cls}"><b>${fat.txt}</b></span>` : ``}
-            ${p && pilotResting(p) ? ` • <span class="pill tagRest">😴 descansando</span>` : ``}
-          </div>
-        </div>
-
-        <div>
-          <div class="k">Condición</div>
-          <div class="v"><b class="state ${condState.cls}">${s.condition}</b>/100 • <span class="state ${condState.cls}"><b>${condState.txt}</b></span></div>
-        </div>
-
-        <div>
-          <div class="k">Combustible</div>
-          <div class="v"><b class="state ${fuelState.cls}">${s.fuel}</b>/100 • <span class="state ${fuelState.cls}"><b>${fuelState.txt}</b></span></div>
-        </div>
-
-        <div>
-          <div class="k">Munición</div>
-          <div class="v"><b class="state ${ammoState.cls}">${s.ammo}</b>/100 • <span class="state ${ammoState.cls}"><b>${ammoState.txt}</b></span></div>
-        </div>
-
-        <div>
-          <div class="k">Listo para misión</div>
-          <div class="v muted" style="font-size:11px">
-            ${(()=>{
-              const c = canLaunch(s);
-              return c.ok ? "Sí (si su SQ es elegido)" : ("No: " + c.why);
-            })()}
-          </div>
-        </div>
-      </div>
-
-      <div class="hr"></div>
-
-      <div class="btns">
-        <button class="primary" data-act="svcFuel" data-id="${s.id}"
-          ${((s.fuel??0)<100 && !serviceBlocked && !s.pendingService) ? "" : "disabled"}>
-          ⛽ Repostar (${fuelM}m · ${fuelC} pts) • libres ${freeCrew("FUEL")}
-        </button>
-
-        <button class="primary" data-act="svcAmmo" data-id="${s.id}"
-          ${((s.ammo??0)<100 && !serviceBlocked && !s.pendingService) ? "" : "disabled"}>
-          🔫 Municionar (${ammoM}m · ${ammoC} pts) • libres ${freeCrew("AMMO")}
-        </button>
-
-        <button data-act="svcMaint" data-id="${s.id}"
-          ${((s.condition??0)<100 && !serviceBlocked && !s.pendingService) ? "" : "disabled"}>
-          🛠️ Mantenimiento (${mainM}m · ${mainC} pts) • libres ${freeCrew("MAINT")}
-        </button>
-
-        ${removeBtn}
-      </div>
+      <div class="slots" data-sq-grid="${sqId}" style="padding:12px"></div>
     `;
-    el.appendChild(div);
+
+    root.appendChild(section);
+
+    const gridEl = section.querySelector(`[data-sq-grid="${sqId}"]`);
+
+    for(const s of group){
+      const p = pilotById(s.pilotId);
+      const st = slotStatus(s);
+
+      const fat = p ? fatigueState(p.fatigue ?? 0) : {txt:"—", cls:"bad"};
+      const fuelState = stateByValue(s.fuel ?? 0);
+      const condState = stateByValue(s.condition ?? 0);
+      const ammoState = stateByValue(s.ammo ?? 0);
+
+      const kills = p ? (p.kills ?? 0) : 0;
+      const stars = p ? starString(kills) : "";
+
+      const needs = slotNeeds(s);
+      const needTags = [];
+      if(s.state!=="LOST"){
+        if(needs.fuel) needTags.push(`<span class="needTag">⛽ Necesita fuel</span>`);
+        if(needs.ammo) needTags.push(`<span class="needTag">🔫 Necesita munición</span>`);
+        if(needs.maint)needTags.push(`<span class="needTag">🛠️ Necesita reparación</span>`);
+      }
+
+      let svcBlock = "";
+      if(s.state === "SERVICE" && s.service?.start && s.service?.end){
+        const total = s.service.end - s.service.start;
+        const left = s.service.end - Date.now();
+        const done = clamp(1 - (left/total), 0, 1);
+        const k = s.service.kind;
+        const label = (k==="FUEL") ? "Repostaje" : (k==="AMMO") ? "Munición" : "Mantenimiento";
+        svcBlock = `
+          <div class="miniBarWrap">
+            <div class="miniBarRow">
+              <div class="muted">${label}</div>
+              <div class="pill">⏱️ <span data-svc-time="${s.id}">${fmtTime(left)}</span></div>
+            </div>
+            <div class="bar"><i data-svc-bar="${s.id}" style="width:${Math.round(done*100)}%"></i></div>
+            <div class="muted" style="font-size:11px;margin-top:6px">Coste: <b>${s.service.cost}</b> pts</div>
+          </div>
+        `;
+      }
+
+      let pendingBlock = "";
+      if(s.pendingService){
+        const ps = s.pendingService;
+        const label = (ps.kind==="FUEL") ? "Repostaje" : (ps.kind==="AMMO") ? "Munición" : "Mantenimiento";
+        pendingBlock = `
+          <div class="miniBarWrap">
+            <div class="miniBarRow">
+              <div class="muted">${label} (cola)</div>
+              <div class="pill">Reserva: <b>${ps.cost}</b> pts</div>
+            </div>
+            <div class="muted" style="font-size:11px">
+              En cola • Tiempo estimado: ${ps.mins} min • Cola actual: <b>${queueCount(ps.kind)}</b>
+            </div>
+            <div style="margin-top:8px">
+              <button class="danger" data-act="cancelQueue" data-id="${s.id}">Cancelar cola</button>
+            </div>
+          </div>
+        `;
+      }
+
+      const serviceBlocked = (s.state==="MISSION" || s.state==="LOST" || s.state==="SERVICE");
+
+      const removeAllowed = (s.state === "LOST") && (!p || !p.alive);
+      const removeBtn = removeAllowed
+        ? `<button class="danger" data-act="removeLost" data-id="${s.id}">Eliminar ficha</button>`
+        : "";
+
+      const fuelM = serviceFuelMins(s.fuel), fuelC = serviceFuelCost(s.fuel);
+      const ammoM = serviceAmmoMins(s.ammo), ammoC = serviceAmmoCost(s.ammo);
+      const mainM = serviceMaintMins(s.condition), mainC = serviceMaintCost(s.condition);
+
+      const div = document.createElement("div");
+      div.className = "slot";
+      div.style.setProperty("--sq-color", meta.color);
+
+      const pilotText = p ? `${p.name} (Skill ${p.skill})` : "—";
+      const imgSrc = planeImgForModel(s.model);
+
+      div.innerHTML = `
+        <div class="slotTop">
+          <div class="slotLeft">
+            <img class="planeThumb" src="${imgSrc}" alt="${s.model}" loading="lazy"
+              style="width:92px;height:92px;object-fit:cover;border-radius:14px;border:1px solid var(--line);background:#0c131d"
+              onerror="this.onerror=null;this.src='${PLANE_IMG_FALLBACK}'">
+            <div>
+              <div class="slotName">${s.callsign}</div>
+              <div class="slotMeta">
+                ${s.model}<br>
+                Piloto: <b>${pilotText}</b> •
+                Misiones: <b>${p ? (p.missions ?? 0) : "—"}</b> •
+                Derribos: <b>${p ? kills : "—"}</b>
+                ${stars ? `<span class="stars"> ${stars}</span>` : ``}
+              </div>
+              ${needTags.length ? `<div class="needsLine">${needTags.join("")}</div>` : ``}
+            </div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
+            <div class="status ${st.cls}">${st.txt}</div>
+          </div>
+        </div>
+
+        ${(svcBlock || pendingBlock) ? `<div class="hr"></div>${svcBlock}${pendingBlock ? `<div class="hr"></div>${pendingBlock}` : ""}` : ""}
+
+        <div class="hr"></div>
+
+        <div class="kv">
+          <div>
+            <div class="k">Escuadrón</div>
+            <div class="v">
+              <select data-act="setSquad" data-id="${s.id}" ${serviceBlocked ? "disabled" : ""}>
+                ${SQUAD_IDS.map(n => `<option value="${n}" ${n===(s.squadronId??0)?"selected":""}>SQ ${n}</option>`).join("")}
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <div class="k">Fatiga piloto</div>
+            <div class="v">
+              <b ${p ? `data-fatigue-val="${p.id}"` : ""} class="${p ? `state ${fat.cls}` : ""}">${p ? Math.round(p.fatigue ?? 0) : "—"}</b>
+              ${p ? ` • <span data-fatigue-txt="${p.id}" class="state ${fat.cls}"><b>${fat.txt}</b></span>` : ``}
+              ${p && pilotResting(p) ? ` • <span class="pill tagRest">😴 descansando</span>` : ``}
+            </div>
+          </div>
+
+          <div>
+            <div class="k">Condición</div>
+            <div class="v"><b class="state ${condState.cls}">${s.condition}</b>/100 • <span class="state ${condState.cls}"><b>${condState.txt}</b></span></div>
+          </div>
+
+          <div>
+            <div class="k">Combustible</div>
+            <div class="v"><b class="state ${fuelState.cls}">${s.fuel}</b>/100 • <span class="state ${fuelState.cls}"><b>${fuelState.txt}</b></span></div>
+          </div>
+
+          <div>
+            <div class="k">Munición</div>
+            <div class="v"><b class="state ${ammoState.cls}">${s.ammo}</b>/100 • <span class="state ${ammoState.cls}"><b>${ammoState.txt}</b></span></div>
+          </div>
+
+          <div>
+            <div class="k">Listo para misión</div>
+            <div class="v muted" style="font-size:11px">
+              ${(()=>{
+                const c = canLaunch(s);
+                return c.ok ? "Sí (si su SQ es elegido)" : ("No: " + c.why);
+              })()}
+            </div>
+          </div>
+        </div>
+
+        <div class="hr"></div>
+
+        <div class="btns">
+          <button class="primary" data-act="svcFuel" data-id="${s.id}"
+            ${((s.fuel??0)<100 && !serviceBlocked && !s.pendingService) ? "" : "disabled"}>
+            ⛽ Repostar (${fuelM}m · ${fuelC} pts) • libres ${freeCrew("FUEL")}
+          </button>
+
+          <button class="primary" data-act="svcAmmo" data-id="${s.id}"
+            ${((s.ammo??0)<100 && !serviceBlocked && !s.pendingService) ? "" : "disabled"}>
+            🔫 Municionar (${ammoM}m · ${ammoC} pts) • libres ${freeCrew("AMMO")}
+          </button>
+
+          <button data-act="svcMaint" data-id="${s.id}"
+            ${((s.condition??0)<100 && !serviceBlocked && !s.pendingService) ? "" : "disabled"}>
+            🛠️ Mantenimiento (${mainM}m · ${mainC} pts) • libres ${freeCrew("MAINT")}
+          </button>
+
+          ${removeBtn}
+        </div>
+      `;
+
+      gridEl.appendChild(div);
+    }
   }
 
-  el.querySelectorAll("button[data-act]").forEach(btn=>{
+  // Delegación de eventos dentro del root
+  root.querySelectorAll("button[data-act]").forEach(btn=>{
     btn.addEventListener("click", ()=>{
       const act = btn.dataset.act;
       const id = btn.dataset.id;
@@ -522,7 +612,7 @@ function renderSlots(){
     });
   });
 
-  el.querySelectorAll("select[data-act='setSquad']").forEach(sel=>{
+  root.querySelectorAll("select[data-act='setSquad']").forEach(sel=>{
     sel.addEventListener("change", ()=>{
       const s = slotById(sel.dataset.id);
       if(!s) return;
