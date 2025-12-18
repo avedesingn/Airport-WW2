@@ -72,7 +72,28 @@
       background: var(--sq-color, #2a3c55);
     }
 
-    .slotTop{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+    /* NUEVO: miniatura del avión */
+    .planeThumb{
+      width:88px;
+      height:66px;
+      border-radius:12px;
+      border:1px solid #26364c;
+      background:#0c131d;
+      object-fit:cover;
+      box-shadow: 0 10px 30px rgba(0,0,0,.25);
+      flex:0 0 auto;
+    }
+    @media (max-width: 560px){
+      .planeThumb{ width:78px; height:58px; }
+    }
+    .slotTop{
+      display:flex;justify-content:space-between;align-items:flex-start;gap:10px
+    }
+    .slotLeft{
+      display:flex;gap:10px;align-items:flex-start;
+      min-width: 0;
+    }
+
     .slotName{font-weight:700;font-size:13px}
     .slotMeta{color:var(--muted);font-size:11px;margin-top:2px;line-height:1.35}
     .status{font-size:11px}
@@ -180,14 +201,6 @@
 
     .tabPanel{display:none}
     .tabPanel.active{display:block}
-
-    /* Report modal: un pelín más ancho */
-    .reportModal .modal{width:min(720px, 100%)}
-    .reportSectionTitle{font-weight:900;font-size:12px;color:#d7e6ff;margin:0 0 6px 0}
-    .reportBlock{
-      border:1px solid #26364c;border-radius:14px;padding:12px;background:rgba(255,255,255,.03);
-    }
-    .reportText{font-size:12px;line-height:1.45;color:#eaf2ff;white-space:pre-wrap}
   </style>
 </head>
 <body>
@@ -273,7 +286,6 @@
   </div>
 </div>
 
-<!-- Modal existente (asignar SQ / tienda) -->
 <div class="modalMask" id="modalMask" aria-hidden="true">
   <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
     <div class="modalTop">
@@ -284,41 +296,6 @@
       <button id="modalClose">Cerrar</button>
     </div>
     <div class="modalGrid" id="modalBody"></div>
-  </div>
-</div>
-
-<!-- Modal NUEVO: Informe de misión -->
-<div class="modalMask reportModal" id="reportModal" aria-hidden="true" style="display:none;">
-  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="reportTitle">
-    <div class="modalTop">
-      <div>
-        <h3 id="reportTitle">Informe</h3>
-        <div class="muted" id="reportMeta">—</div>
-      </div>
-      <button id="reportClose">Cerrar</button>
-    </div>
-
-    <div class="modalGrid" style="margin-top:12px">
-      <div class="reportBlock">
-        <div class="reportSectionTitle">Briefing</div>
-        <div class="reportText" id="reportBriefing"></div>
-      </div>
-
-      <div class="reportBlock">
-        <div class="reportSectionTitle">Eventos</div>
-        <div class="reportText" id="reportEvents"></div>
-      </div>
-
-      <div class="reportBlock">
-        <div class="reportSectionTitle">Stats</div>
-        <div class="reportText" id="reportStats"></div>
-      </div>
-
-      <div class="reportBlock">
-        <div class="reportSectionTitle">Debrief</div>
-        <div class="reportText" id="reportDebrief"></div>
-      </div>
-    </div>
   </div>
 </div>
 
