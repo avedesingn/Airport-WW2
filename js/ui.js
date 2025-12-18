@@ -5,6 +5,21 @@ import { fatigueState, pilotPlane, pilotResting, pilotInMission, startPilotRest 
 import { busyCount, freeCrew, queueCount, startOrQueueService, cancelPending, serviceFuelMins, serviceFuelCost, serviceAmmoMins, serviceAmmoCost, serviceMaintMins, serviceMaintCost } from "./services.js";
 import { generateMission, findEligibleSquads, assignMissionToSquad, canLaunch, missionRisk, spendForNewMission } from "./missions.js";
 
+/* =========================
+   PLANE IMAGES (by model)
+   - rutas relativas (GitHub Pages OK)
+========================= */
+const PLANE_IMG_BY_MODEL = {
+  "Spitfire Mk.I": "assets/planes/spitfire-mk1.png",
+  // Futuro:
+  // "Hurricane Mk.I": "assets/planes/hurricane-mk1.png",
+};
+const PLANE_IMG_FALLBACK = "assets/planes/spitfire-mk1.png";
+
+function planeImgForModel(model){
+  return PLANE_IMG_BY_MODEL[model] ?? PLANE_IMG_FALLBACK;
+}
+
 /* Render flags */
 let needsSlotsRender = true;
 let needsPilotsRender = true;
@@ -36,7 +51,7 @@ function starString(kills){
   return n ? "★".repeat(n) : "";
 }
 
-/* Modal (general) */
+/* Modal */
 const modalMask = ()=>document.getElementById("modalMask");
 const modalClose = ()=>document.getElementById("modalClose");
 const modalTitle = ()=>document.getElementById("modalTitle");
@@ -48,63 +63,6 @@ let pendingAssignMissionId = null;
 function openModal(){ modalMask().style.display="flex"; modalMask().setAttribute("aria-hidden","false"); }
 function closeModal(){ pendingAssignMissionId=null; modalMask().style.display="none"; modalMask().setAttribute("aria-hidden","true"); }
 
-/* ✅ Report modal */
-const reportMask = ()=>document.getElementById("reportModal");
-const reportClose = ()=>document.getElementById("reportClose");
-const reportTitle = ()=>document.getElementById("reportTitle");
-const reportMeta  = ()=>document.getElementById("reportMeta");
-const reportBrief = ()=>document.getElementById("reportBriefing");
-const reportEvents= ()=>document.getElementById("reportEvents");
-const reportStats = ()=>document.getElementById("reportStats");
-const reportDebr  = ()=>document.getElementById("reportDebrief");
-
-function openReportModal(report){
-  if(!reportMask()) return;
-
-  const dStart = new Date(report.startedAt ?? report.createdAt ?? Date.now());
-  const dEnd   = new Date(report.endedAt ?? report.createdAt ?? Date.now());
-  const hh1 = String(dStart.getHours()).padStart(2,"0");
-  const mm1 = String(dStart.getMinutes()).padStart(2,"0");
-  const hh2 = String(dEnd.getHours()).padStart(2,"0");
-  const mm2 = String(dEnd.getMinutes()).padStart(2,"0");
-
-  reportTitle().textContent = report.title || "Informe de misión";
-  reportMeta().textContent = `SQ ${report.squadId ?? "—"} • ${hh1}:${mm1} → ${hh2}:${mm2} • Resultado: ${report.outcome ?? "—"}`;
-
-  reportBrief().textContent  = report.briefing ?? "—";
-  reportDebr().textContent   = report.debrief ?? "—";
-
-  const ev = Array.isArray(report.events) ? report.events : [];
-  reportEvents().textContent = ev.length ? ev.map(e=>`• ${e}`).join("\n") : "—";
-
-  const s = report.stats || {};
-  const lines = [
-    `Derribos: ${s.kills ?? 0}`,
-    `Pérdidas: ${s.losses ?? 0}`,
-    `Causas: ${(Array.isArray(s.lossCauses) && s.lossCauses.length) ? s.lossCauses.join(", ") : "—"}`,
-    `Daño total: ${s.damageTotal ?? 0}%`,
-    `Fuel usado: ${(s.fuelUsed==null) ? "—" : `${s.fuelUsed}%`}`,
-    `Munición usada: ${(s.ammoUsed==null) ? "—" : `${s.ammoUsed}%`}`,
-    `Puntos: ${(s.pointsDelta==null) ? "—" : `+${s.pointsDelta}`}`,
-  ];
-  reportStats().textContent = lines.join("\n");
-
-  reportMask().style.display="flex";
-  reportMask().setAttribute("aria-hidden","false");
-}
-function closeReportModal(){
-  if(!reportMask()) return;
-  reportMask().style.display="none";
-  reportMask().setAttribute("aria-hidden","true");
-}
-
-function reportForMissionId(missionId){
-  const list = game.missionHistory || [];
-  // el primero suele ser el más reciente (unshift)
-  return list.find(r => r && r.missionId === missionId) || null;
-}
-
-/* Squad modal */
 function openSquadModal(mission){
   pendingAssignMissionId = mission.id;
   modalTitle().textContent = "Asignar escuadrón";
@@ -434,21 +392,26 @@ function renderSlots(){
     div.style.setProperty("--sq-color", meta.color);
 
     const pilotText = p ? `${p.name} (Skill ${p.skill})` : "—";
+    const imgSrc = planeImgForModel(s.model);
 
     div.innerHTML = `
       <div class="slotTop">
-        <div>
-          <div class="slotName">${s.callsign}</div>
-          <div class="slotMeta">
-            ${s.model}<br>
-            Piloto: <b>${pilotText}</b> •
-            Misiones: <b>${p ? (p.missions ?? 0) : "—"}</b> •
-            Derribos: <b>${p ? kills : "—"}</b>
-            ${stars ? `<span class="stars"> ${stars}</span>` : ``}
+        <div class="slotLeft">
+          <img class="planeThumb" src="${imgSrc}" alt="${s.model}" loading="lazy"
+            onerror="this.onerror=null;this.src='${PLANE_IMG_FALLBACK}'">
+          <div>
+            <div class="slotName">${s.callsign}</div>
+            <div class="slotMeta">
+              ${s.model}<br>
+              Piloto: <b>${pilotText}</b> •
+              Misiones: <b>${p ? (p.missions ?? 0) : "—"}</b> •
+              Derribos: <b>${p ? kills : "—"}</b>
+              ${stars ? `<span class="stars"> ${stars}</span>` : ``}
+            </div>
+            ${needTags.length ? `<div class="needsLine">${needTags.join("")}</div>` : ``}
           </div>
-
-          ${needTags.length ? `<div class="needsLine">${needTags.join("")}</div>` : ``}
         </div>
+
         <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
           <span class="sqBadge" style="border-color:${meta.color}; background:${meta.badge}; color:#eaf2ff;">SQ ${s.squadronId ?? 0}</span>
           <div class="status ${st.cls}">${st.txt}</div>
@@ -819,17 +782,13 @@ function renderMissions(){
     const sqMeta = SQUAD_COLORS[m.assignedSquadronId ?? 0] ?? SQUAD_COLORS[0];
     div.style.borderColor = sqMeta.color;
 
-    const rep = reportForMissionId(m.id);
-
     div.innerHTML = `
       <div class="missionHead">
         <div>
           <div class="mName">${m.name}</div>
           <div class="mSmall">Hecha • SQ <b>${m.assignedSquadronId}</b> • Aviones: <b>${m.assignedSlotIds.length}</b></div>
         </div>
-        <div class="btns">
-          ${rep ? `<button class="primary" data-act="viewReport" data-mid="${m.id}">Ver informe</button>` : `<span class="pill">✅</span>`}
-        </div>
+        <span class="pill">✅</span>
       </div>
     `;
     elHistory.appendChild(div);
@@ -853,16 +812,6 @@ function renderMissions(){
       pushLog(`Misión rechazada: “${name}”.`);
       saveGame();
       renderAll(false);
-    });
-  });
-
-  // ✅ abrir informe
-  document.querySelectorAll("button[data-act='viewReport']").forEach(btn=>{
-    btn.addEventListener("click", ()=>{
-      const mid = btn.dataset.mid;
-      const rep = reportForMissionId(mid);
-      if(!rep){ pushLog("No se encontró el informe de esa misión."); return; }
-      openReportModal(rep);
     });
   });
 }
@@ -957,10 +906,6 @@ export function wireUI(){
   // modal close
   document.getElementById("modalClose").addEventListener("click", closeModal);
   document.getElementById("modalMask").addEventListener("click", (e)=>{ if(e.target===document.getElementById("modalMask")) closeModal(); });
-
-  // ✅ report modal close
-  if(reportClose()) reportClose().addEventListener("click", closeReportModal);
-  if(reportMask()) reportMask().addEventListener("click", (e)=>{ if(e.target===reportMask()) closeReportModal(); });
 
   document.getElementById("btnShop").addEventListener("click", openShopModal);
 
