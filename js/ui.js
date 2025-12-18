@@ -288,13 +288,12 @@ function slotNeeds(slot){
 }
 
 /* =========================
-   Render Slots (por escuadrón + en filas)
+   Render Slots (por escuadrón + en filas PRO)
 ========================= */
 function renderSlots(){
   const el = document.getElementById("slots");
   el.innerHTML = "";
 
-  // agrupar por squad
   const bySquad = new Map();
   for(const s of game.slots){
     const sq = (s.squadronId ?? 0);
@@ -311,7 +310,6 @@ function renderSlots(){
 
     const meta = SQUAD_COLORS[sqId] ?? SQUAD_COLORS[0];
 
-    // stats de escuadrón
     const total = list.length;
     const ready = list.filter(s=>s.state==="READY").length;
     const inMission = list.filter(s=>s.state==="MISSION").length;
@@ -371,7 +369,6 @@ function renderSlots(){
       const ammoM = serviceAmmoMins(s.ammo), ammoC = serviceAmmoCost(s.ammo);
       const mainM = serviceMaintMins(s.condition), mainC = serviceMaintCost(s.condition);
 
-      // bloque de progreso servicio (si está en servicio)
       let svcBlock = "";
       if(s.state === "SERVICE" && s.service?.start && s.service?.end){
         const totalMs = s.service.end - s.service.start;
@@ -391,7 +388,6 @@ function renderSlots(){
         `;
       }
 
-      // bloque de cola (si tiene pendiente)
       let pendingBlock = "";
       if(s.pendingService){
         const ps = s.pendingService;
@@ -425,8 +421,8 @@ function renderSlots(){
             onerror="this.onerror=null;this.src='${PLANE_IMG_FALLBACK}'">
 
           <div class="slotMain">
-            <div class="slotHeadLine">
-              <div>
+            <div class="slotTopLine">
+              <div style="min-width:0">
                 <div class="slotName">${s.callsign}</div>
                 <div class="slotMeta">
                   ${s.model} • Piloto: <b>${pilotText}</b><br>
@@ -434,32 +430,31 @@ function renderSlots(){
                   ${stars ? `<span class="stars"> ${stars}</span>` : ``}
                 </div>
               </div>
-
-              <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
+              <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex:0 0 auto">
                 <div class="status ${st.cls}">${st.txt}</div>
               </div>
             </div>
 
             ${needTags.length ? `<div class="needsLine">${needTags.join("")}</div>` : ``}
-          </div>
 
-          <div class="slotActions">
-            <button class="primary" data-act="svcFuel" data-id="${s.id}"
-              ${((s.fuel??0)<100 && !serviceBlocked && !s.pendingService) ? "" : "disabled"}>
-              ⛽ Repostar (${fuelM}m · ${fuelC})
-            </button>
+            <div class="slotActions">
+              <button class="primary" data-act="svcFuel" data-id="${s.id}"
+                ${((s.fuel??0)<100 && !serviceBlocked && !s.pendingService) ? "" : "disabled"}>
+                ⛽ Repostar (${fuelM}m · ${fuelC})
+              </button>
 
-            <button class="primary" data-act="svcAmmo" data-id="${s.id}"
-              ${((s.ammo??0)<100 && !serviceBlocked && !s.pendingService) ? "" : "disabled"}>
-              🔫 Municionar (${ammoM}m · ${ammoC})
-            </button>
+              <button class="primary" data-act="svcAmmo" data-id="${s.id}"
+                ${((s.ammo??0)<100 && !serviceBlocked && !s.pendingService) ? "" : "disabled"}>
+                🔫 Municionar (${ammoM}m · ${ammoC})
+              </button>
 
-            <button data-act="svcMaint" data-id="${s.id}"
-              ${((s.condition??0)<100 && !serviceBlocked && !s.pendingService) ? "" : "disabled"}>
-              🛠️ Mantenimiento (${mainM}m · ${mainC})
-            </button>
+              <button data-act="svcMaint" data-id="${s.id}"
+                ${((s.condition??0)<100 && !serviceBlocked && !s.pendingService) ? "" : "disabled"}>
+                🛠️ Mantenimiento (${mainM}m · ${mainC})
+              </button>
 
-            ${removeBtn}
+              ${removeBtn}
+            </div>
           </div>
         </div>
 
@@ -530,7 +525,6 @@ function renderSlots(){
     el.appendChild(squadBlock);
   }
 
-  // acciones botones
   el.querySelectorAll("button[data-act]").forEach(btn=>{
     btn.addEventListener("click", ()=>{
       const act = btn.dataset.act;
@@ -559,7 +553,6 @@ function renderSlots(){
     });
   });
 
-  // selector de escuadrón
   el.querySelectorAll("select[data-act='setSquad']").forEach(sel=>{
     sel.addEventListener("change", ()=>{
       const s = slotById(sel.dataset.id);
@@ -895,7 +888,7 @@ function updateProgressUI(){
   }
 }
 
-/* Fatigue UI updates (sin re-render completo, para no cerrar <select>) */
+/* Fatigue UI updates */
 function updateFatigueUI(){
   for(const p of game.pilots){
     if(!p?.alive) continue;
