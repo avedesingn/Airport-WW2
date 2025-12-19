@@ -32,7 +32,11 @@ export function defaultGame(){
     createdAt: now(),
     lastTick: now(),
     points: 14,
-    ui: { tab: "PLANES" },
+    ui: {
+  tab: "PLANES",
+  campaignPick: { localityId: null, objectiveId: null } // ✅ NUEVO
+},
+
     crew: { fuelers:1, mechanics:1, armorers:1 },
     pilots,
     slots,
@@ -164,4 +168,5 @@ export function hardReset(){
 /* Accessors */
 export function pilotById(id){ return game.pilots.find(p=>p.id===id); }
 export function slotById(id){ return game.slots.find(s=>s.id===id); }
+
 
