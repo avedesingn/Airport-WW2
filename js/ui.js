@@ -1,4 +1,3 @@
-// === js/ui.js ===
 import { game, saveGame, hardReset, pilotById, slotById } from "./state.js";
 import {
   MISSION_GEN_COST, BUY_PILOT_COST, BUY_PLANE_COST,
@@ -18,8 +17,6 @@ import { generateMission, findEligibleSquads, assignMissionToSquad, canLaunch, m
 ========================= */
 const PLANE_IMG_BY_MODEL = {
   "Spitfire Mk.I": "assets/planes/spitfire-mk1.png",
-  // Futuro:
-  // "Hurricane Mk.I": "assets/planes/hurricane-mk1.png",
 };
 const PLANE_IMG_FALLBACK = "assets/planes/spitfire-mk1.png";
 function planeImgForModel(model){
@@ -37,7 +34,7 @@ export function pushLog(msg){
 }
 
 /* =========================
-   Campaign UI (read-only v0)
+   Campaign UI (interactive v0)
 ========================= */
 function escapeHtml(s){
   return String(s ?? "")
@@ -54,7 +51,7 @@ function pill(text){
 function renderCampaign(){
   const turnEl = document.getElementById("campTurn");
   const listEl = document.getElementById("campList");
-  if(!turnEl || !listEl) return; // si la card no existe aún, no rompe
+  if(!turnEl || !listEl) return;
 
   const c = game.campaign;
   if(!c){
@@ -91,15 +88,37 @@ function renderCampaign(){
     const st   = escapeHtml(L.state ?? "—");
     const def  = escapeHtml(L.airDefenseLevel ?? "—");
 
+    const selectedLoc = (game.ui?.campaignPick?.localityId === id);
+    const selectedObjId = game.ui?.campaignPick?.objectiveId ?? null;
+
+    const objectives = (Array.isArray(L.objectives) ? L.objectives : []);
+    const objHtml = objectives.length ? `
+      <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:8px">
+        ${objectives.map(o=>{
+          const isSel = selectedLoc && selectedObjId === o.id;
+          const style = isSel ? `style="border-color:var(--accent);background:#152236;color:#d7e6ff"` : "";
+          return `
+            <button class="pill" ${style}
+              data-act="pickObjective"
+              data-loc="${escapeHtml(id)}"
+              data-obj="${escapeHtml(o.id)}"
+              title="${escapeHtml(o.type ?? "")}">
+              🎯 ${escapeHtml(o.name)}
+            </button>
+          `;
+        }).join("")}
+      </div>
+    ` : `<div class="muted" style="font-size:11px;margin-top:10px">Sin objetivos.</div>`;
+
     const routes = (Array.isArray(L.routes) ? L.routes : []).map(r=>{
       const icon = (r.status === "OPEN") ? "🔓" : "🔒";
       const toName = c.localities?.[r.toLocalityId]?.name ?? r.toLocalityId ?? "—";
       const unlock = r.unlock ? ` <span class="muted">(${escapeHtml(r.unlock)})</span>` : "";
-      return `<div class="muted" style="font-size:11px;margin-top:4px">${icon} ${escapeHtml(toName)}${unlock}</div>`;
+      return `<div class="muted" style="font-size:11px;margin-top:6px">${icon} ${escapeHtml(toName)}${unlock}</div>`;
     }).join("");
 
     return `
-      <div class="mission">
+      <div class="mission" style="${selectedLoc ? "outline:1px solid rgba(122,167,255,.45)" : ""}">
         <div class="missionHead">
           <div>
             <div class="mName">${name}</div>
@@ -109,13 +128,56 @@ function renderCampaign(){
               ${pill(`Estado: <b>${st}</b>`)}
             </div>
           </div>
+          <div class="btns">
+            <button class="primary" data-act="pickLocality" data-loc="${escapeHtml(id)}">
+              ${selectedLoc ? "✅ Seleccionada" : "Seleccionar"}
+            </button>
+          </div>
         </div>
-        ${routes || `<div class="muted" style="font-size:11px;margin-top:8px">Sin rutas.</div>`}
+
+        ${objHtml}
+
+        ${routes || `<div class="muted" style="font-size:11px;margin-top:10px">Sin rutas.</div>`}
       </div>
     `;
   }).join("");
 
   listEl.innerHTML = rows;
+}
+
+function wireCampaignClicks(){
+  const listEl = document.getElementById("campList");
+  if(!listEl) return;
+
+  listEl.addEventListener("click", (e)=>{
+    const btn = e.target?.closest?.("[data-act]");
+    if(!btn) return;
+
+    const act = btn.dataset.act;
+
+    if(act==="pickLocality"){
+      const loc = btn.dataset.loc;
+      game.ui.campaignPick.localityId = loc;
+      game.ui.campaignPick.objectiveId = null;
+      pushLog(`🗺️ Campaña: localidad seleccionada (${loc}).`);
+      saveGame();
+      renderAll(true);
+      return;
+    }
+
+    if(act==="pickObjective"){
+      const loc = btn.dataset.loc;
+      const obj = btn.dataset.obj;
+      if(game.ui.campaignPick.localityId !== loc){
+        game.ui.campaignPick.localityId = loc;
+      }
+      game.ui.campaignPick.objectiveId = obj;
+      pushLog(`🎯 Campaña: objetivo seleccionado (${obj}).`);
+      saveGame();
+      renderAll(true);
+      return;
+    }
+  });
 }
 
 function isInteractingWithSelect(){
@@ -141,7 +203,6 @@ function starString(kills){
 
 /* Modal */
 const modalMask = ()=>document.getElementById("modalMask");
-const modalClose = ()=>document.getElementById("modalClose");
 const modalTitle = ()=>document.getElementById("modalTitle");
 const modalSubtitle = ()=>document.getElementById("modalSubtitle");
 const modalBody = ()=>document.getElementById("modalBody");
@@ -371,7 +432,7 @@ function slotNeeds(slot){
 }
 
 /* =========================
-   Render Slots (por escuadrón + en filas PRO)
+   Render Slots
 ========================= */
 function renderSlots(){
   const el = document.getElementById("slots");
@@ -587,10 +648,7 @@ function renderSlots(){
               <div>
                 <div class="k">Listo para misión</div>
                 <div class="v muted" style="font-size:11px">
-                  ${(()=>{
-                    const c = canLaunch(s);
-                    return c.ok ? "Sí (si su SQ es elegido)" : ("No: " + c.why);
-                  })()}
+                  ${(()=>{ const c = canLaunch(s); return c.ok ? "Sí (si su SQ es elegido)" : ("No: " + c.why); })()}
                 </div>
               </div>
             </div>
@@ -649,7 +707,7 @@ function renderSlots(){
   });
 }
 
-/* Render Pilots (sin tocar) */
+/* Render Pilots */
 function renderPilots(){
   const el = document.getElementById("pilots");
   el.innerHTML = "";
@@ -815,7 +873,7 @@ function renderPilots(){
   });
 }
 
-/* Missions render (sin tocar) */
+/* Missions render */
 function renderMissions(){
   const elActive = document.getElementById("missionsActive");
   const elPending = document.getElementById("missionsPending");
@@ -856,7 +914,7 @@ function renderMissions(){
       </div>
       <div style="margin-top:10px" class="bar"><i style="width:${Math.round(donePct*100)}%"></i></div>
       <div class="two">
-        <div class="muted" style="font-size:11px">Fatiga: ${m.fatigueMin}-${m.fatigueMax} • Riesgo base: ${Math.round(missionRisk(m.typeKey)*100)}%</div>
+        <div class="muted" style="font-size:11px">Fatiga: ${m.fatigueMin}-${m.fatigueMax} • Riesgo base: ${Math.round(missionRisk(m.typeKey, m.riskBonus ?? 0)*100)}%</div>
         <div class="muted" style="font-size:11px;text-align:right">Progreso: <b>${Math.round(donePct*100)}%</b></div>
       </div>
     `;
@@ -868,6 +926,15 @@ function renderMissions(){
     div.className = "mission";
     const eligible = findEligibleSquads(m.requiredPlanes);
 
+    const loc = m.localityId ? (game.campaign?.localities?.[m.localityId]?.name ?? m.localityId) : null;
+    const obj = (m.localityId && m.objectiveId)
+      ? ((game.campaign?.localities?.[m.localityId]?.objectives ?? []).find(o=>o.id===m.objectiveId)?.name ?? m.objectiveId)
+      : null;
+
+    const targetingLine = (loc || obj)
+      ? `<div class="muted" style="margin-top:8px;font-size:11px">🗺️ <b>${loc ?? "—"}</b>${obj ? ` • 🎯 <b>${obj}</b>` : ""}</div>`
+      : ``;
+
     div.innerHTML = `
       <div class="missionHead">
         <div>
@@ -875,6 +942,7 @@ function renderMissions(){
           <div class="mSmall">
             Duración: ${Math.round(m.durationMs/60000)} min • Requiere: <b>${m.requiredPlanes}</b> • Recompensa: ${m.rewardMin}-${m.rewardMax}
           </div>
+          ${targetingLine}
         </div>
         <div class="btns">
           <button class="primary" data-act="assignSquad" data-id="${m.id}" ${eligible.length? "" : "disabled"}>Asignar SQ…</button>
@@ -995,7 +1063,7 @@ function updateFatigueUI(){
 /* Public renderAll */
 export function renderAll(forcePanel=false){
   renderHeader();
-  renderCampaign(); // ✅ NUEVO
+  renderCampaign();
   renderMissions();
   renderLog();
 
@@ -1019,9 +1087,7 @@ export function renderAll(forcePanel=false){
 /* Wire UI once */
 export function wireUI(){
   document.getElementById("modalClose").addEventListener("click", closeModal);
-  document.getElementById("modalMask").addEventListener("click", (e)=>{
-    if(e.target===document.getElementById("modalMask")) closeModal();
-  });
+  document.getElementById("modalMask").addEventListener("click", (e)=>{ if(e.target===document.getElementById("modalMask")) closeModal(); });
 
   document.getElementById("btnShop").addEventListener("click", openShopModal);
 
@@ -1045,9 +1111,18 @@ export function wireUI(){
       renderAll(false);
       return;
     }
-    const m = generateMission();
+
+    const pick = game.ui?.campaignPick ?? {localityId:null, objectiveId:null};
+    const m = generateMission(pick);
+
     game.missions.unshift(m);
-    pushLog(`Nueva misión: “${m.name}” (mín ${m.requiredPlanes}). Coste: -${MISSION_GEN_COST} pts.`);
+
+    const loc = m.localityId ? (game.campaign?.localities?.[m.localityId]?.name ?? m.localityId) : null;
+    const obj = (m.localityId && m.objectiveId)
+      ? ((game.campaign?.localities?.[m.localityId]?.objectives ?? []).find(o=>o.id===m.objectiveId)?.name ?? m.objectiveId)
+      : null;
+
+    pushLog(`Nueva misión: “${m.name}” (mín ${m.requiredPlanes}). Coste: -${MISSION_GEN_COST} pts.${loc ? ` [${loc}${obj ? " • "+obj : ""}]` : ""}`);
     saveGame();
     renderAll(false);
   });
@@ -1063,4 +1138,7 @@ export function wireUI(){
       renderAll(true);
     });
   });
+
+  // ✅ NUEVO: campaña clicable
+  wireCampaignClicks();
 }
