@@ -35,6 +35,88 @@ export function pushLog(msg){
   game.log = game.log.slice(0, 200);
 }
 
+/* =========================
+   Campaign UI (read-only v0)
+========================= */
+function escapeHtml(s){
+  return String(s ?? "")
+    .replaceAll("&","&amp;")
+    .replaceAll("<","&lt;")
+    .replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;")
+    .replaceAll("'","&#039;");
+}
+function pill(text){
+  return `<span class="pill">${text}</span>`;
+}
+
+function renderCampaign(){
+  const turnEl = document.getElementById("campTurn");
+  const listEl = document.getElementById("campList");
+  if(!turnEl || !listEl) return; // si la card no existe aún, no rompe
+
+  const c = game.campaign;
+  if(!c){
+    turnEl.textContent = "0";
+    listEl.innerHTML = `<div class="muted">Campaña no inicializada.</div>`;
+    return;
+  }
+
+  turnEl.textContent = String(c.turn ?? 0);
+
+  const ids = Array.isArray(c.activeLocalityIds) ? c.activeLocalityIds : [];
+  if(!ids.length){
+    listEl.innerHTML = `<div class="muted">No hay localidades activas.</div>`;
+    return;
+  }
+
+  const rows = ids.map(id=>{
+    const L = c.localities?.[id];
+    if(!L){
+      return `
+        <div class="mission">
+          <div class="missionHead">
+            <div>
+              <div class="mName">${escapeHtml(id)}</div>
+              <div class="mSmall muted">Sin datos de localidad</div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    const name = escapeHtml(L.name ?? id);
+    const type = escapeHtml(L.archetype ?? "—");
+    const st   = escapeHtml(L.state ?? "—");
+    const def  = escapeHtml(L.airDefenseLevel ?? "—");
+
+    const routes = (Array.isArray(L.routes) ? L.routes : []).map(r=>{
+      const icon = (r.status === "OPEN") ? "🔓" : "🔒";
+      const toName = c.localities?.[r.toLocalityId]?.name ?? r.toLocalityId ?? "—";
+      const unlock = r.unlock ? ` <span class="muted">(${escapeHtml(r.unlock)})</span>` : "";
+      return `<div class="muted" style="font-size:11px;margin-top:4px">${icon} ${escapeHtml(toName)}${unlock}</div>`;
+    }).join("");
+
+    return `
+      <div class="mission">
+        <div class="missionHead">
+          <div>
+            <div class="mName">${name}</div>
+            <div class="mSmall">
+              ${pill(`Tipo: <b>${type}</b>`)}
+              ${pill(`Defensa: <b>${def}</b>`)}
+              ${pill(`Estado: <b>${st}</b>`)}
+            </div>
+          </div>
+        </div>
+        ${routes || `<div class="muted" style="font-size:11px;margin-top:8px">Sin rutas.</div>`}
+      </div>
+    `;
+  }).join("");
+
+  listEl.innerHTML = rows;
+}
+
 function isInteractingWithSelect(){
   const a = document.activeElement;
   return a && a.tagName === "SELECT";
@@ -912,6 +994,7 @@ function updateFatigueUI(){
 /* Public renderAll */
 export function renderAll(forcePanel=false){
   renderHeader();
+  renderCampaign(); // ✅ NUEVO
   renderMissions();
   renderLog();
 
