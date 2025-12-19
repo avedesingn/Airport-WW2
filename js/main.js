@@ -1,4 +1,3 @@
-// === js/main.js ===
 import { initGame, game, saveGame } from "./state.js";
 import { wireUI, renderAll } from "./ui.js";
 import { finishService, tryStartNextFromQueue } from "./services.js";
@@ -31,7 +30,7 @@ function tick(){
   // misiones terminadas
   for(const m of game.missions.filter(x=>x.state==="ACTIVE")){
     if(m.endAt && t >= m.endAt){
-      completeMission(m); // ya guarda dentro
+      completeMission(m);
       dirty = true;
     }
   }
@@ -47,7 +46,7 @@ function tick(){
   // render
   renderAll(false);
 
-  // autosave cada 10s aprox (si no se guardó ya por algo “gordo”)
+  // autosave cada 10s aprox
   if(!dirty && Math.floor(t/10000) !== Math.floor((t-dt)/10000)){
     saveGame();
   }
