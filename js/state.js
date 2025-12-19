@@ -37,6 +37,49 @@ export function defaultGame(){
     pilots,
     slots,
     missions: [],
+        // ✅ NUEVO: campaña (Fase 1-2: solo lectura UI)
+    campaign: {
+      turn: 0,
+      points: 0, // (opcional) si en el futuro separas puntos de campaña vs puntos base
+      activeLocalityIds: ["sur_mer_emetre"],
+      localities: {
+        "sur_mer_emetre": {
+          id: "sur_mer_emetre",
+          name: "Sur-Mer-Émetre",
+          archetype: "AA_BELT",
+          depth: 0,
+          state: "ACTIVE",          // ACTIVE | PRESSURED | WEAKENED | STARVED | REINFORCED | IGNORED
+          airDefenseLevel: "HIGH",  // LOW | MED | HIGH | VERY_HIGH
+          baseRisk: 0.18,
+          lastActionTurn: 0,
+          routes: [
+            { toLocalityId: "port_saint_avelin", status: "LOCKED", unlock: "Neutraliza AA clave (demo)" }
+          ],
+          objectives: [
+            { id:"aa_1", name:"Posición AA (Costa)", type:"AA", status:"ACTIVE", isKey:true },
+            { id:"log_1", name:"Parque logístico", type:"LOGISTICS", status:"ACTIVE", isKey:false },
+            { id:"br_1", name:"Puente estratégico", type:"BRIDGE", status:"ACTIVE", isKey:false },
+          ],
+          events: []
+        },
+
+        // placeholder para mostrar ruta (no activa todavía)
+        "port_saint_avelin": {
+          id: "port_saint_avelin",
+          name: "Port-Saint-Avelin",
+          archetype: "LOGISTICS",
+          depth: 1,
+          state: "LOCKED",
+          airDefenseLevel: "MED",
+          baseRisk: 0.20,
+          lastActionTurn: 0,
+          routes: [],
+          objectives: [],
+          events: []
+        }
+      }
+    },
+
 
     // ✅ NUEVO: historial persistente de informes
     missionHistory: [],
@@ -56,6 +99,19 @@ export function load(){
     if(!g.ui.tab) g.ui.tab = "PLANES";
 
     if(!g.crew) g.crew = { fuelers:1, mechanics:1, armorers:1 };
+
+    // ✅ NUEVO: campaña (saneo para saves antiguos)
+    if(!g.campaign || typeof g.campaign !== "object"){
+      g.campaign = {
+        turn: 0,
+        points: 0,
+        activeLocalityIds: [],
+        localities: {}
+      };
+    }
+    if(typeof g.campaign.turn !== "number") g.campaign.turn = 0;
+    if(!Array.isArray(g.campaign.activeLocalityIds)) g.campaign.activeLocalityIds = [];
+    if(!g.campaign.localities || typeof g.campaign.localities !== "object") g.campaign.localities = {};
 
     // ✅ NUEVO: asegurar array de informes
     if(!Array.isArray(g.missionHistory)) g.missionHistory = [];
@@ -108,3 +164,4 @@ export function hardReset(){
 /* Accessors */
 export function pilotById(id){ return game.pilots.find(p=>p.id===id); }
 export function slotById(id){ return game.slots.find(s=>s.id===id); }
+
