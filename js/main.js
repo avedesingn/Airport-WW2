@@ -1,3 +1,4 @@
+// === js/main.js ===
 import { initGame, game, saveGame } from "./state.js";
 import { wireUI, renderAll } from "./ui.js";
 import { finishService, tryStartNextFromQueue } from "./services.js";
