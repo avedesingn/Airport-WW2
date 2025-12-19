@@ -13,7 +13,7 @@ export function defaultGame(){
     {id:uid(), name:"Sgt. Evans",   role:"Fighter", skill:1, fatigue:0,  alive:true, missions:0, kills:0, rest:{active:false}},
   ];
 
-  const slots = Array.from({length:6}).map((_,i)=>({
+  const slots = Array.from({length:6}).map((_,i)=>( {
     id:uid(),
     callsign:`Red-${i+1}`,
     model:"Spitfire Mk.I",
@@ -32,19 +32,22 @@ export function defaultGame(){
     createdAt: now(),
     lastTick: now(),
     points: 14,
+
     ui: {
-  tab: "PLANES",
-  campaignPick: { localityId: null, objectiveId: null } // ✅ NUEVO
-},
+      tab: "PLANES",
+      // ✅ NUEVO: selección de campaña (para dirigir misiones)
+      campaignPick: { localityId: null, objectiveId: null }
+    },
 
     crew: { fuelers:1, mechanics:1, armorers:1 },
     pilots,
     slots,
     missions: [],
-        // ✅ NUEVO: campaña (Fase 1-2: solo lectura UI)
+
+    // ✅ Campaña (fase 1-2: UI + selección; aún no afecta resultados)
     campaign: {
       turn: 0,
-      points: 0, // (opcional) si en el futuro separas puntos de campaña vs puntos base
+      points: 0,
       activeLocalityIds: ["sur_mer_emetre"],
       localities: {
         "sur_mer_emetre": {
@@ -52,7 +55,7 @@ export function defaultGame(){
           name: "Sur-Mer-Émetre",
           archetype: "AA_BELT",
           depth: 0,
-          state: "ACTIVE",          // ACTIVE | PRESSURED | WEAKENED | STARVED | REINFORCED | IGNORED
+          state: "ACTIVE",          // ACTIVE | PRESSURED | WEAKENED | STARVED | REINFORCED | IGNORED | LOCKED
           airDefenseLevel: "HIGH",  // LOW | MED | HIGH | VERY_HIGH
           baseRisk: 0.18,
           lastActionTurn: 0,
@@ -60,14 +63,13 @@ export function defaultGame(){
             { toLocalityId: "port_saint_avelin", status: "LOCKED", unlock: "Neutraliza AA clave (demo)" }
           ],
           objectives: [
-            { id:"aa_1", name:"Posición AA (Costa)", type:"AA", status:"ACTIVE", isKey:true },
-            { id:"log_1", name:"Parque logístico", type:"LOGISTICS", status:"ACTIVE", isKey:false },
-            { id:"br_1", name:"Puente estratégico", type:"BRIDGE", status:"ACTIVE", isKey:false },
+            { id:"aa_1",  name:"Posición AA (Costa)", type:"AA",        status:"ACTIVE", isKey:true },
+            { id:"log_1", name:"Parque logístico",    type:"LOGISTICS", status:"ACTIVE", isKey:false },
+            { id:"br_1",  name:"Puente estratégico",  type:"BRIDGE",    status:"ACTIVE", isKey:false },
           ],
           events: []
         },
 
-        // placeholder para mostrar ruta (no activa todavía)
         "port_saint_avelin": {
           id: "port_saint_avelin",
           name: "Port-Saint-Avelin",
@@ -84,8 +86,7 @@ export function defaultGame(){
       }
     },
 
-
-    // ✅ NUEVO: historial persistente de informes
+    // ✅ historial persistente de informes
     missionHistory: [],
 
     log: [{t: now(), msg:"Base RAF lista. v1.0: personal de tierra + colas + contratación (modular)."}]
@@ -102,9 +103,16 @@ export function load(){
     if(!g.ui) g.ui = { tab:"PLANES" };
     if(!g.ui.tab) g.ui.tab = "PLANES";
 
+    // ✅ NUEVO: selección de campaña (para saves antiguos)
+    if(!g.ui.campaignPick || typeof g.ui.campaignPick !== "object"){
+      g.ui.campaignPick = { localityId:null, objectiveId:null };
+    }
+    if(!("localityId" in g.ui.campaignPick)) g.ui.campaignPick.localityId = null;
+    if(!("objectiveId" in g.ui.campaignPick)) g.ui.campaignPick.objectiveId = null;
+
     if(!g.crew) g.crew = { fuelers:1, mechanics:1, armorers:1 };
 
-    // ✅ NUEVO: campaña (saneo para saves antiguos)
+    // ✅ campaña (saneo para saves antiguos)
     if(!g.campaign || typeof g.campaign !== "object"){
       g.campaign = {
         turn: 0,
@@ -117,9 +125,8 @@ export function load(){
     if(!Array.isArray(g.campaign.activeLocalityIds)) g.campaign.activeLocalityIds = [];
     if(!g.campaign.localities || typeof g.campaign.localities !== "object") g.campaign.localities = {};
 
-    // ✅ NUEVO: asegurar array de informes
+    // ✅ asegurar array de informes
     if(!Array.isArray(g.missionHistory)) g.missionHistory = [];
-    // saneo mínimo de informes
     g.missionHistory = g.missionHistory
       .filter(r => r && typeof r === "object" && r.id && r.missionId)
       .slice(0, 50);
@@ -139,7 +146,6 @@ export function load(){
       if(!("pendingService" in s)) s.pendingService = null;
     }
 
-    // ✅ por si en saves antiguos no existe missions/log
     if(!Array.isArray(g.missions)) g.missions = [];
     if(!Array.isArray(g.log)) g.log = [];
 
@@ -168,5 +174,3 @@ export function hardReset(){
 /* Accessors */
 export function pilotById(id){ return game.pilots.find(p=>p.id===id); }
 export function slotById(id){ return game.slots.find(s=>s.id===id); }
-
-
