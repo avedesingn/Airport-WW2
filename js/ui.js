@@ -1,3 +1,4 @@
+// === js/ui.js ===
 import { game, saveGame, hardReset, pilotById, slotById } from "./state.js";
 import {
   MISSION_GEN_COST, BUY_PILOT_COST, BUY_PLANE_COST,
@@ -1018,7 +1019,9 @@ export function renderAll(forcePanel=false){
 /* Wire UI once */
 export function wireUI(){
   document.getElementById("modalClose").addEventListener("click", closeModal);
-  document.getElementById("modalMask").addEventListener("click", (e)=>{ if(e.target===document.getElementById("modalMask")) closeModal(); });
+  document.getElementById("modalMask").addEventListener("click", (e)=>{
+    if(e.target===document.getElementById("modalMask")) closeModal();
+  });
 
   document.getElementById("btnShop").addEventListener("click", openShopModal);
 
