@@ -1,7 +1,7 @@
 import { game, saveGame, slotById, pilotById } from "./state.js";
 import { MISSION_GEN_COST, MIN_AMMO_TO_LAUNCH, MIN_COND_TO_LAUNCH, MIN_FUEL_TO_LAUNCH } from "./constants.js";
 import { now, clamp, chance, randInt } from "./utils.js";
-import { pilotResting, pilotPlane } from "./pilots.js";
+import { pilotResting } from "./pilots.js";
 import { pushLog } from "./ui.js";
 
 export function canLaunch(slot){
@@ -83,7 +83,7 @@ function finalizeMissionReport(m, outcome, details){
     missionId: m.id,
     title: m.name || "Misión",
     squadId: m.assignedSquadronId ?? null,
-    outcome, // "SUCCESS" | "PARTIAL" | "FAIL" | "ABORT"
+    outcome,
     createdAt,
     startedAt,
     endedAt: createdAt,
@@ -108,18 +108,34 @@ function finalizeMissionReport(m, outcome, details){
 
 /* =========================
    MISSION GENERATION
+   ✅ NUEVO: si pasas ctx (localidad+objetivo), la misión queda dirigida
 ========================= */
-export function generateMission(){
+export function generateMission(ctx = null){
   const types = [
     {key:"PATROL",    name:"Patrulla costera", baseMin:2, baseMax:4, reward:[10,16], fatigue:[6,12]},
     {key:"INTERCEPT", name:"Intercepción",     baseMin:2, baseMax:5, reward:[12,20], fatigue:[10,18]},
     {key:"ESCORT",    name:"Escolta corta",    baseMin:3, baseMax:5, reward:[11,18], fatigue:[8,16]},
     {key:"SCRAMBLE",  name:"Alerta rápida",    baseMin:2, baseMax:4, reward:[11,19], fatigue:[10,18]},
   ];
+
   const pickType = types[Math.floor(Math.random()*types.length)];
   const durMin = pickType.baseMin + Math.floor(Math.random()*(pickType.baseMax-pickType.baseMin+1));
   const durationMs = durMin * 60 * 1000;
   const requiredPlanes = [3,4,5][Math.floor(Math.random()*3)];
+
+  // ✅ campaña dirigida
+  const localityId  = ctx?.localityId ?? null;
+  const objectiveId = ctx?.objectiveId ?? null;
+  const L = localityId ? (game.campaign?.localities?.[localityId] ?? null) : null;
+  const obj = (L && objectiveId) ? (L.objectives ?? []).find(o=>o.id===objectiveId) : null;
+
+  const def = (L?.airDefenseLevel ?? "MED");
+  let riskBonus = 0;
+  let rewardBonus = 0;
+  if(def==="LOW"){ riskBonus=-0.01; rewardBonus=0; }
+  else if(def==="MED"){ riskBonus=0.00; rewardBonus=0; }
+  else if(def==="HIGH"){ riskBonus=+0.03; rewardBonus=+1; }
+  else if(def==="VERY_HIGH"){ riskBonus=+0.06; rewardBonus=+2; }
 
   const mission = {
     id: crypto.randomUUID?.() ?? (Math.random().toString(16).slice(2)),
@@ -129,8 +145,8 @@ export function generateMission(){
     startAt: null,
     endAt: null,
     durationMs,
-    rewardMin: pickType.reward[0],
-    rewardMax: pickType.reward[1],
+    rewardMin: pickType.reward[0] + rewardBonus,
+    rewardMax: pickType.reward[1] + rewardBonus,
     fatigueMin: pickType.fatigue[0],
     fatigueMax: pickType.fatigue[1],
     requiredPlanes,
@@ -138,25 +154,52 @@ export function generateMission(){
     assignedSlotIds: [],
     state: "PENDING",
 
-    // report/lore fields (persisted in save)
     zone: null,
     weather: null,
     threat: null,
     briefing: null,
-    events: []
+    events: [],
+
+    // ✅ link campaña
+    localityId,
+    objectiveId,
+    objectiveType: obj?.type ?? null,
+    defenseLevel: def,
+    riskBonus
   };
 
-  mission.briefing = buildBriefing(mission);
+  const locName = L?.name ?? null;
+  const objName = obj?.name ?? null;
+  const objType = obj?.type ?? null;
+
+  const kindLine =
+    mission.typeKey==="INTERCEPT" ? "Interceptación urgente." :
+    mission.typeKey==="SCRAMBLE" ? "Scramble inmediato." :
+    mission.typeKey==="ESCORT" ? "Escolta asignada." :
+    "Patrulla CAP.";
+
+  // Si hay selección de campaña, briefing “dirigido”; si no, usa el briefing clásico.
+  mission.briefing = (locName || objName)
+    ? [
+        locName ? `🗺️ Localidad: ${locName}.` : null,
+        objName ? `🎯 Objetivo: ${objName}${objType ? ` (${objType})` : ""}.` : null,
+        `🛰️ Orden: ${kindLine}`,
+        `🛡️ Defensa estimada: ${def}.`
+      ].filter(Boolean).join("\n")
+    : buildBriefing(mission);
+
   return mission;
 }
 
-export function missionRisk(typeKey){
-  if(typeKey==="INTERCEPT") return 0.20;
-  if(typeKey==="SCRAMBLE")  return 0.16;
-  if(typeKey==="ESCORT")    return 0.12;
-  if(typeKey==="PATROL")    return 0.08;
-  return 0.12;
+export function missionRisk(typeKey, bonus=0){
+  let base = 0.12;
+  if(typeKey==="INTERCEPT") base = 0.20;
+  if(typeKey==="SCRAMBLE")  base = 0.16;
+  if(typeKey==="ESCORT")    base = 0.12;
+  if(typeKey==="PATROL")    base = 0.08;
+  return clamp(base + (bonus ?? 0), 0.01, 0.95);
 }
+
 function baseKillChanceForMission(typeKey){
   if(typeKey==="INTERCEPT") return 0.30;
   if(typeKey==="SCRAMBLE")  return 0.24;
@@ -164,6 +207,7 @@ function baseKillChanceForMission(typeKey){
   if(typeKey==="PATROL")    return 0.08;
   return 0.12;
 }
+
 function rollKillsForPilot(pilot, mission){
   if(!pilot || !pilot.alive) return 0;
   if(pilot.role !== "Fighter") return 0;
@@ -174,13 +218,15 @@ function rollKillsForPilot(pilot, mission){
   const chanceP = clamp(base + skillBonus - fatiguePenalty, 0.02, 0.65);
   return chance(chanceP) ? 1 : 0;
 }
+
 function computeRiskForSlot(slot, pilot, mission){
-  const base = missionRisk(mission.typeKey);
+  const base = missionRisk(mission.typeKey, mission.riskBonus ?? 0);
   const fat = clamp((pilot?.fatigue ?? 0) / 160, 0, 0.55);
   const skill = clamp((pilot?.skill ?? 1) * 0.05, 0, 0.18);
   const condPenalty = clamp((60 - (slot.condition ?? 100)) / 200, 0, 0.25);
   return clamp(base + fat + condPenalty - skill, 0.03, 0.90);
 }
+
 function fuelCostForMission(typeKey){
   if(typeKey==="INTERCEPT") return randInt(22, 32);
   if(typeKey==="SCRAMBLE")  return randInt(18, 28);
@@ -188,6 +234,7 @@ function fuelCostForMission(typeKey){
   if(typeKey==="PATROL")    return randInt(16, 26);
   return randInt(18, 28);
 }
+
 function ammoCostForMission(typeKey){
   if(typeKey==="INTERCEPT") return randInt(22, 38);
   if(typeKey==="SCRAMBLE")  return randInt(18, 34);
@@ -199,6 +246,7 @@ function ammoCostForMission(typeKey){
 export function readySlotsInSquad(sqId){
   return game.slots.filter(s => (s.squadronId ?? 0) === sqId && canLaunch(s).ok);
 }
+
 export function findEligibleSquads(requiredPlanes){
   return [0,1,2,3,4].filter(sqId => readySlotsInSquad(sqId).length >= requiredPlanes);
 }
@@ -335,7 +383,6 @@ export function completeMission(m){
 
   pushLog(`Misión completada: +${reward} pts. Fuel -${fuelSpent} • Ammo -${ammoSpent}.${extra.length ? " ("+extra.join(" • ")+")" : ""}`);
 
-  // guardar informe persistente
   finalizeMissionReport(m, "SUCCESS", {
     kills: totalKills,
     losses: lostCount,
